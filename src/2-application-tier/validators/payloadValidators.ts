@@ -61,3 +61,34 @@ export function validateStatusUpdatePayload(input: StatusUpdateInput): Validatio
     notes: input.notes !== undefined ? sanitizeText(input.notes, 500) : undefined,
   });
 }
+
+
+
+// --- Auth Validators Login---
+
+export interface LoginValidationResult {
+  valid: boolean;
+  error: string | null;
+  sanitizedEmail?: string;
+}
+
+export function validateLoginInput(email: string, password: string): LoginValidationResult {
+  const trimmedEmail = email.trim();
+
+  if (!trimmedEmail) {
+    return { valid: false, error: 'Email is required.' };
+  }
+  // Basic email format check
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    return { valid: false, error: 'Please enter a valid email address.' };
+  }
+  if (!password) {
+    return { valid: false, error: 'Password is required.' };
+  }
+
+  return { 
+    valid: true, 
+    error: null, 
+    sanitizedEmail: trimmedEmail 
+  };
+}

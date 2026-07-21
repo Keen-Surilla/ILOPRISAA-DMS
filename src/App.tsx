@@ -1,15 +1,3 @@
-/**
- * Application Entry Point
- *
- * Wires the three tiers together:
- * - Tier 1 (Presentation): Route-guarded UI components
- * - Tier 2 (Application): Auth store initialization
- * - Tier 3 (Data): Supabase client (initialized via authStore)
- *
- * The SecureErrorBoundary wraps the entire app tree to ensure
- * no raw error information ever reaches the browser DOM.
- */
-
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SecureErrorBoundary } from './1-presentation-tier/components/SecureErrorBoundary';
@@ -29,6 +17,10 @@ const AdminDashboard = React.lazy(() =>
 );
 const LoginPage = React.lazy(() =>
   import('./1-presentation-tier/pages/LoginPage')
+);
+// Added SignUpPage lazy import
+const SignUpPage = React.lazy(() =>
+  import('./1-presentation-tier/pages/SignUpPage')
 );
 const LandingPage = React.lazy(() =>
   import('./1-presentation-tier/pages/LandingPage')
@@ -60,6 +52,8 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
+          {/* Added the new signup route here */}
+          <Route path="/signup" element={<SignUpPage />} />
 
           {/* Athlete-only routes */}
           <Route

@@ -25,11 +25,15 @@ export interface Database {
     Tables: {
       profiles: {
         Row: {
-          id: string;               // UUID — matches auth.users.id (FK)
+          id: string;               // UUID - matches auth.users.id (FK)
           role: UserRole;
           full_name: string;
           email: string;
           institution_id: string | null;
+          phone: string | null;     // NEW
+          dob: string | null;       // NEW
+          gender: string | null;    // NEW
+          sport: string | null;     // NEW
           avatar_url: string | null;
           created_at: string;
           updated_at: string;
@@ -100,6 +104,38 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>;
         Update: never; // Audit logs are write-once, append-only
       };
+      events: {
+        Row: {
+          id: string;
+          title: string;
+          event_date: string;
+          event_time: string;
+          type: 'event' | 'deadline';
+          status: 'Pending' | 'Completed';
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          event_date: string;
+          event_time: string;
+          type: 'event' | 'deadline';
+          status?: 'Pending' | 'Completed';
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          event_date?: string;
+          event_time?: string;
+          type?: 'event' | 'deadline';
+          status?: 'Pending' | 'Completed';
+          user_id?: string;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       athlete_document_summary: {
@@ -134,3 +170,4 @@ export type Document = Database['public']['Tables']['documents']['Row'];
 export type Institution = Database['public']['Tables']['institutions']['Row'];
 export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
 export type CoachAthleteAssignment = Database['public']['Tables']['coach_athlete_assignments']['Row'];
+export type EventRow = Database['public']['Tables']['events']['Row'];

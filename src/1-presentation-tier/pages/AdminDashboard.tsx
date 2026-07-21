@@ -52,12 +52,6 @@ export default function AdminDashboard() {
             ))}
           </ul>
         </section>
-
-        <EventCalendar
-          events={events.events}
-          isLoading={events.isLoading}
-          onMonthChange={(y, m) => void events.loadMonth(y, m)}
-        />
       </div>
     </PortalShell>
   );

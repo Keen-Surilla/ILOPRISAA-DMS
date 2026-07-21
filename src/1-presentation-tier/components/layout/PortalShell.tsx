@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import type { UserRole } from '../../../3-data-tier/types/database.types';
+import Logo2 from "../../../assets/logo2.svg";
 
 export interface NavItem {
   id: string;
@@ -31,13 +32,20 @@ export function PortalShell({ portalTitle, navItems, children }: PortalShellProp
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl shrink-0">
-        <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold text-blue-400 tracking-wide">ILOPRISAA</h1>
-          <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">
+      {/* SIDEBAR: Now white with light borders and dark text */}
+      <aside className="w-64 bg-white text-slate-800 flex flex-col border-r border-slate-200 shadow-sm shrink-0">
+        <div className="p-6 border-b border-slate-200 flex flex-col items-start gap-3">
+          {/* INJECTED LOGO */}
+          <img 
+            src={Logo2} 
+            alt="ILOPRISAA Document Management System Logo" 
+            className="h-9 w-auto object-contain object-left flex-none" 
+          />
+          <p className="ml-1 text-xs text-slate-500 font-bold uppercase tracking-widest">
             {role ? ROLE_LABELS[role] : portalTitle}
           </p>
         </div>
+        
         <nav className="flex-1 px-3 py-4 space-y-1">
           {navItems.map((item) => (
             <button
@@ -46,8 +54,8 @@ export function PortalShell({ portalTitle, navItems, children }: PortalShellProp
               onClick={item.onClick}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition ${
                 item.active
-                  ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white border border-transparent'
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
               }`}
             >
               {item.icon}
@@ -55,8 +63,10 @@ export function PortalShell({ portalTitle, navItems, children }: PortalShellProp
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-slate-800">
-          <p className="text-sm font-medium px-2 truncate">{user?.full_name ?? 'User'}</p>
+        
+        {/* BOTTOM PROFILE/LOGOUT: Adjusted for light theme */}
+        <div className="p-4 border-t border-slate-200">
+          <p className="text-sm font-bold text-slate-800 px-2 truncate">{user?.full_name ?? 'User'}</p>
           <p className="text-xs text-slate-500 px-2 truncate mb-3">{user?.email}</p>
           <button
             type="button"
@@ -64,13 +74,15 @@ export function PortalShell({ portalTitle, navItems, children }: PortalShellProp
               await signOut();
               navigate('/login', { replace: true });
             }}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-red-400 hover:bg-red-500/10 transition text-sm font-medium"
+            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-red-600 hover:bg-red-50 transition text-sm font-medium"
           >
             <LogOut className="w-4 h-4" />
             Sign Out
           </button>
         </div>
       </aside>
+      
+      {/* MAIN CONTENT */}
       <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   );

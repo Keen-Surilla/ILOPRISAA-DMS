@@ -1,6 +1,4 @@
-/**
- * TIER 2 — APPLICATION TIER: Auth Store (Zustand)
- */
+
 
 import { create } from 'zustand';
 import { supabase } from '../../3-data-tier/config/SupabaseClient';
@@ -13,6 +11,16 @@ interface AuthState {
   isLoading: boolean;
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string, 
+    password: string, 
+    fullName: string,
+    phone: string,
+    dob: string,
+    gender: string,
+    school: string,
+    sport: string
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -47,6 +55,36 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
+  signUp: async (email, password, fullName, phone, dob, gender, school, sport) => {
+    set({ isLoading: true });
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            phone: phone,
+            dob: dob,
+            gender: gender,
+            school: school,
+            sport: sport,
+          },
+        },
+      });
+
+      if (error) {
+        set({ isLoading: false });
+        return { error: error.message };
+      }
+      
+      set({ isLoading: false });
+      return { error: null };
+    } catch (err) {
+       set({ isLoading: false });
+       return { error: 'An unexpected error occurred during sign up.' };
+    }
+  },
   signIn: async (email: string, password: string) => {
     const trimmedEmail = email.trim();
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -69,8 +107,19 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
-    await supabase.auth.signOut();
-    set({ user: null, role: null, isAuthenticated: false });
+    try {
+      // 1. Tell Supabase to end the session
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // 2. Clear the local frontend state
+      set({ user: null, role: null });
+    } catch (error) {
+      console.error("Error during sign out:", error);
+      // Even if Supabase fails to sign out (e.g. network issue), 
+      // we should still clear local state to force them out of the portal
+      set({ user: null, role: null });
+    }
   },
 }));
 
