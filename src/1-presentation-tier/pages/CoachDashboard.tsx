@@ -1,306 +1,321 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Users, LayoutDashboard, Settings, Plus, FileText, Clock, Bell, X, Trash2 } from 'lucide-react';
+import React, { useMemo, useState, useEffect, Suspense, lazy } from 'react';
+import { Calendar, Users, LayoutDashboard, Settings, Clock, Bell, CheckCircle2, AlertCircle, ArrowRight, Search, Download } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
-import { calendarApi } from '../../3-data-tier/api/calendarApi';
-import type { CalendarEvent } from '../../3-data-tier/api/calendarApi';
+import { teamApi } from '../../3-data-tier/api/teamApi';
+import { documentsApi, TOTAL_REQUIRED_DOCUMENTS } from '../../3-data-tier/api/documentsApi';
+import { listEvents } from '../../3-data-tier/services/eventService';
 import { PortalShell } from '../components/layout/PortalShell';
-import { EventCalendar } from '../components/calendar/EventCalendar';
+import { DocumentChecklistModal } from '../components/ui/DocumentChecklistModal';
+import SettingsView from '../pages/coach-views/SettingsView';
 
+// --- MUI X CHARTS ---
+import { LineChart } from '@mui/x-charts/LineChart';
+import { PieChart } from '@mui/x-charts/PieChart';
+
+// Lazy Load other tabs
+const TeamView = React.lazy(() => import('./coach-views/TeamView')); // Make sure this path matches your exact folder structure!
+const ScheduleView = lazy(() => import('./coach-views/ScheduleView'));
+
+// --- PART 1: UI COMPONENTS ---
+interface KpiCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  trend?: string;
+  trendUp?: boolean;
+}
+
+// MATCHING THE SCREENSHOT: New KPI Card Design
+function KpiCard({ icon, label, value, trend, trendUp = true }: KpiCardProps) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 transition-all hover:shadow-md">
+      <div className="flex justify-between items-start mb-4">
+        <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+          {icon}
+        </div>
+        {trend && (
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${trendUp ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+            {trend}
+          </span>
+        )}
+      </div>
+      <h3 className="text-slate-500 text-sm font-medium">{label}</h3>
+      <p className="text-3xl font-bold text-slate-800 mt-1">{value}</p>
+    </div>
+  );
+}
+
+interface TrendPoint { date: Date; percent: number; }
+
+// --- PART 2: THE DASHBOARD CHARTS & DATA ---
+function DashboardUI() {
+  const { user } = useAuthStore();
+  const coachId = user?.id;
+  const [docsAthlete, setDocsAthlete] = useState<{ id: string; name: string } | null>(null);
+
+  // Data Fetching
+  const { data: athletes = [], isLoading: isLoadingAthletes } = useQuery({ queryKey: ['teamMembers', coachId], queryFn: () => teamApi.getTeamMembers(coachId as string), enabled: !!coachId });
+  const athleteIds = useMemo(() => athletes.map(a => a.id), [athletes]);
+  const { data: documentCounts = {}, isLoading: isLoadingDocCounts } = useQuery({ queryKey: ['documentCounts', coachId, athleteIds], queryFn: () => documentsApi.getDocumentCountsForAthletes(athleteIds), enabled: athleteIds.length > 0 });
+  const { data: statusCounts = {}, isLoading: isLoadingStatusCounts } = useQuery({ queryKey: ['documentStatusCounts', coachId, athleteIds], queryFn: () => documentsApi.getDocumentStatusCounts(athleteIds), enabled: athleteIds.length > 0 });
+  const { data: events = [], isLoading: isLoadingEvents } = useQuery({ queryKey: ['events', coachId], queryFn: () => listEvents({ userId: coachId }), enabled: !!coachId, staleTime: 30_000 });
+  const { data: uploadTimestamps = [], isLoading: isLoadingTimestamps } = useQuery({ queryKey: ['uploadTimestamps', coachId, athleteIds], queryFn: () => documentsApi.getUploadTimestamps(athleteIds), enabled: athleteIds.length > 0 });
+
+  const isLoading = isLoadingAthletes || isLoadingDocCounts || isLoadingStatusCounts || isLoadingEvents;
+  
+  // KPI Math
+  const totalAthletes = athletes.length;
+  const totalRequiredSlots = totalAthletes * TOTAL_REQUIRED_DOCUMENTS;
+  const totalCompletedSlots = Object.values(documentCounts).reduce((sum, n) => sum + Math.min(n, TOTAL_REQUIRED_DOCUMENTS), 0);
+  const athletesFullyComplete = athletes.filter(a => (documentCounts[a.id] ?? 0) === TOTAL_REQUIRED_DOCUMENTS).length;
+  const pendingReviews = statusCounts['pending_review'] ?? 0;
+  const missingDocs = Math.max(0, totalRequiredSlots - totalCompletedSlots - pendingReviews);
+
+  const upcomingEventsList = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return events.filter(e => e?.event_date && new Date(e.event_date) >= today).slice(0, 5);
+  }, [events]);
+
+  const upcomingEventsCount = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const weekFromNow = new Date(today); weekFromNow.setDate(weekFromNow.getDate() + 7);
+    return events.filter(e => {
+      if (!e?.event_date) return false;
+      const d = new Date(e.event_date); return d >= today && d <= weekFromNow;
+    }).length;
+  }, [events]);
+
+  const trendData: TrendPoint[] = useMemo(() => {
+    if (totalRequiredSlots === 0) return [];
+    const parsed = uploadTimestamps.map(ts => new Date(ts)).filter(d => !Number.isNaN(d.getTime())).sort((a, b) => a.getTime() - b.getTime());
+    const days = 30; const today = new Date(); today.setHours(23, 59, 59, 999);
+    const points: TrendPoint[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const dayEnd = new Date(today); dayEnd.setDate(dayEnd.getDate() - i);
+      const cumulativeCount = parsed.filter(d => d <= dayEnd).length;
+      points.push({ date: new Date(dayEnd), percent: (Math.min(cumulativeCount, totalRequiredSlots) / totalRequiredSlots) * 100 });
+    }
+    return points;
+  }, [uploadTimestamps, totalRequiredSlots]);
+
+  const athletesNeedingAttention = useMemo(() => {
+    return athletes.map(a => ({ ...a, completed: documentCounts[a.id] ?? 0 }))
+      .filter(a => a.completed < TOTAL_REQUIRED_DOCUMENTS).sort((a, b) => a.completed - b.completed).slice(0, 5);
+  }, [athletes, documentCounts]);
+
+  return (
+    <div className="animate-in fade-in duration-300">
+      
+      {/* MATCHING THE SCREENSHOT: Header with Action Button */}
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-800">Overview</h2>
+          <p className="text-slate-500 text-sm mt-1">An at-a-glance view of your team's progress.</p>
+        </div>
+        <button className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
+          <Download className="w-4 h-4" />
+          Generate Report
+        </button>
+      </header>
+
+      {/* MATCHING THE SCREENSHOT: Top KPI Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+        <KpiCard icon={<Users className="w-5 h-5" />} label="Total Athletes" value={isLoading ? '—' : totalAthletes} trend="+12%" trendUp={true} />
+        <KpiCard icon={<CheckCircle2 className="w-5 h-5" />} label="Fully Complete" value={isLoading ? '—' : athletesFullyComplete} trend="Steady" trendUp={true} />
+        <KpiCard icon={<AlertCircle className="w-5 h-5" />} label="Pending Reviews" value={isLoading ? '—' : pendingReviews} trend="-5%" trendUp={true} />
+        <KpiCard icon={<Clock className="w-5 h-5" />} label="Upcoming Events" value={isLoading ? '—' : upcomingEventsCount} />
+      </div>
+
+      {/* MATCHING THE SCREENSHOT: Middle Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        
+        {/* Activity Overview (Line Chart) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+          <h3 className="font-bold text-slate-800 text-base mb-6">Activity Overview</h3>
+          {isLoading || isLoadingTimestamps ? ( <div className="h-[250px] flex items-center justify-center text-xs text-slate-400">Loading…</div> ) : (
+            <div className="h-[250px] w-full -ml-4">
+              <LineChart
+                xAxis={[{ 
+                  data: trendData.map(d => d.date), 
+                  scaleType: 'time',
+                  valueFormatter: (date: Date) => date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+                  tickMinStep: 3600 * 1000 * 24 * 5
+                }]}
+                series={[{ 
+                  data: trendData.map(d => d.percent), 
+                  area: true, color: '#3b82f6', showMark: false,
+                  valueFormatter: (v) => `${v?.toFixed(1)}% Completed`
+                }]}
+                margin={{ top: 10, bottom: 20, left: 40, right: 10 }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* MATCHING THE SCREENSHOT: Document Status (Donut Chart) */}
+        <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col">
+          <h3 className="font-bold text-slate-800 text-base mb-6">Document Status</h3>
+          <div className="flex-1 flex items-center justify-center">
+            {isLoading ? ( <div className="h-[200px] flex items-center justify-center text-xs text-slate-400">Loading…</div> ) : totalAthletes === 0 ? (
+              <p className="text-sm text-slate-400 text-center">No documents found.</p>
+            ) : (
+              <PieChart
+                series={[{
+                  data: [
+                    { id: 0, value: totalCompletedSlots, label: 'Verified', color: '#10b981' }, // Green
+                    { id: 1, value: pendingReviews, label: 'Pending', color: '#f59e0b' },      // Yellow
+                    { id: 2, value: missingDocs, label: 'Missing', color: '#f1f5f9' },         // Gray
+                  ],
+                  innerRadius: 60,
+                  outerRadius: 100,
+                  paddingAngle: 2,
+                  cornerRadius: 4,
+                }]}
+                height={220}
+                margin={{ right: 5 }}
+                slotProps={{ legend: { direction: 'horizontal', position: { vertical: 'bottom', horizontal: 'center' }, } }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* MATCHING THE SCREENSHOT: Bottom Lists (50/50 Split) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Recent Uploads / Needs Attention */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-bold text-slate-800 text-base">Athletes Needing Attention</h3>
+            <button className="text-sm text-blue-600 font-medium hover:text-blue-700">View All</button>
+          </div>
+          
+          {isLoading ? ( <p className="text-xs text-slate-400">Loading…</p> ) : athletesNeedingAttention.length === 0 ? ( <p className="text-xs text-slate-400 py-4">Everyone is fully up to date!</p> ) : (
+            <div className="space-y-4">
+              {athletesNeedingAttention.map(a => (
+                <div key={a.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-100">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold uppercase shrink-0">
+                      {a.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{a.name}</p>
+                      <p className="text-xs text-slate-500">{a.completed}/{TOTAL_REQUIRED_DOCUMENTS} Documents</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setDocsAthlete({ id: a.id, name: a.name })} className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">
+                    Review <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Upcoming Events */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-bold text-slate-800 text-base">Upcoming Events</h3>
+            <button className="text-sm text-blue-600 font-medium hover:text-blue-700">Calendar</button>
+          </div>
+          
+          <div className="space-y-4">
+            {isLoading && <p className="text-xs text-slate-400">Loading…</p>}
+            {!isLoading && upcomingEventsList.length === 0 && ( <p className="text-xs text-slate-400 py-4">Nothing scheduled.</p> )}
+            {upcomingEventsList.map(evt => (
+              <div key={evt.id} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors border border-transparent hover:border-slate-100">
+                <div className="bg-[#0f172a] text-white rounded-xl w-12 h-12 flex flex-col items-center justify-center shrink-0 shadow-sm">
+                  <span className="text-[10px] font-medium text-slate-300 uppercase">{new Date(evt.event_date).toLocaleString('default', { month: 'short' })}</span>
+                  <span className="text-lg font-bold leading-none">{new Date(evt.event_date).getDate()}</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-slate-800">{evt.title}</h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{evt.type}</span>
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400"><Clock className="w-3 h-3" /> {evt.event_time}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <DocumentChecklistModal isOpen={docsAthlete !== null} athleteId={docsAthlete?.id ?? null} athleteName={docsAthlete?.name ?? ''} coachUserId={coachId ?? ''} onClose={() => setDocsAthlete(null)} />
+    </div>
+  );
+}
+
+
+// --- PART 3: THE MAIN EXPORT (Sidebar & Tab Router) ---
 export default function CoachDashboard() {
-  const authStore = useAuthStore();
-  const user = authStore?.user;
-  
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState('schedule');
-  
-  // MODAL STATES (Now includes status)
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [newEvent, setNewEvent] = useState({ title: '', date: '', time: '', type: 'event', status: 'Pending' });
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const profileName = user?.full_name || user?.email || 'Coach Profile';
-  const profileSport = (user as Record<string, any>)?.sport || 'Unassigned';
+  const { user } = useAuthStore();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('coachDashboardTab') || 'dashboard');
 
   useEffect(() => {
-    let isMounted = true;
-    calendarApi.getEvents().then(data => {
-      if (isMounted) {
-        setEvents(Array.isArray(data) ? data : []);
-        setIsLoading(false);
-      }
-    }).catch(err => {
-      console.error("Failed to load events:", err);
-      if (isMounted) setIsLoading(false);
-    });
-    return () => { isMounted = false; };
-  }, []);
+    localStorage.setItem('coachDashboardTab', activeTab);
+  }, [activeTab]);
 
-// Include both events and meetings in this panel!
-  const upcomingEvents = Array.isArray(events) ? events.filter(e => e?.type === 'event' || e?.type === 'meeting').slice(0, 3) : [];
-  const upcomingDeadlines = Array.isArray(events) ? events.filter(e => e?.type === 'deadline').slice(0, 4) : [];
+  const profileName = user?.full_name || user?.email || 'Coach Profile';
+  const profileSport = (user as Record<string, any>)?.sport || 'Coach';
 
-  const handleOpenNew = () => {
-    setEditingId(null);
-    setNewEvent({ title: '', date: '', time: '', type: 'event', status: 'Pending' });
-    setErrorMessage(null);
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (eventToEdit: CalendarEvent) => {
-    setEditingId(eventToEdit.id);
-    setNewEvent({ 
-      title: eventToEdit.title, 
-      date: eventToEdit.event_date, 
-      time: eventToEdit.event_time, 
-      type: eventToEdit.type,
-      status: eventToEdit.status || 'Pending' // Load real status
-    });
-    setErrorMessage(null);
-    setIsModalOpen(true);
-  };
-
-  const handleSaveEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    try {
-      if (editingId) {
-        const updatedEvent = await calendarApi.updateEvent(editingId, {
-          title: newEvent.title,
-          event_date: newEvent.date,
-          event_time: newEvent.time,
-          type: newEvent.type as 'event' | 'deadline',
-          status: newEvent.status as 'Pending' | 'Completed'
-        });
-        if (updatedEvent) {
-          setEvents(prev => prev.map(ev => ev.id === editingId ? updatedEvent : ev));
-        }
-      } else {
-        const currentUserId = user?.id || '00000000-0000-0000-0000-000000000000';
-        const createdEvent = await calendarApi.addEvent({
-          title: newEvent.title,
-          event_date: newEvent.date,
-          event_time: newEvent.time,
-          type: newEvent.type as 'event' | 'deadline',
-          status: newEvent.status as 'Pending' | 'Completed',
-          user_id: currentUserId
-        });
-        if (createdEvent) setEvents(prev => [...prev, createdEvent]);
-      }
-      setIsModalOpen(false);
-    } catch (error: any) {
-      setErrorMessage(error?.message || "An unexpected error occurred while saving.");
-    }
-  };
-
-  // Calendar specific delete handler
-  const handleDeleteFromCalendar = async (eventId: string): Promise<boolean> => {
-    try {
-      await calendarApi.deleteEvent(eventId);
-      setEvents(prev => prev.filter(ev => ev.id !== eventId));
-      return true;
-    } catch (error) {
-      console.error("Failed to delete from calendar", error);
-      return false;
-    }
-  };
-
-  const handleDeleteEvent = async () => {
-    if (!editingId) return;
-    setErrorMessage(null);
-    try {
-      await calendarApi.deleteEvent(editingId);
-      setEvents(prev => prev.filter(ev => ev.id !== editingId));
-      setIsModalOpen(false);
-    } catch (error: any) {
-      setErrorMessage(error?.message || "Failed to delete the event.");
+  // Router Switcher
+  const renderActiveView = () => {
+    switch (activeTab) {
+      case 'dashboard': return <DashboardUI />;
+      case 'schedule': return <ScheduleView />;
+      case 'team': return <TeamView />;
+      default: return <DashboardUI />;
     }
   };
 
   return (
-    <PortalShell
-      portalTitle="Coach Portal"
-      navItems={[
-        { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, active: activeTab === 'dashboard', onClick: () => setActiveTab('dashboard') },
-        { id: 'schedule', label: 'Schedule', icon: <Calendar className="w-5 h-5" />, active: activeTab === 'schedule', onClick: () => setActiveTab('schedule') },
-        { id: 'team', label: 'Team', icon: <Users className="w-5 h-5" />, active: activeTab === 'team', onClick: () => setActiveTab('team') },
-        { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, active: activeTab === 'settings', onClick: () => setActiveTab('settings') },
-      ]}
-    >
-      <div className="p-8 max-w-7xl mx-auto font-sans text-slate-900 relative">
-        
-        {/* Header Section */}
-        <div className="flex justify-end items-center gap-6 mb-8">
-          <button className="text-slate-800 hover:text-blue-600 transition-colors">
-            <Bell className="w-5 h-5 fill-current" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center overflow-hidden">
-              <span className="text-slate-600 font-bold text-sm uppercase">{profileName ? profileName.charAt(0) : 'C'}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-slate-800 leading-tight">{profileName}</span>
-              <span className="text-[10px] font-medium text-slate-500 capitalize">{profileSport}</span>
-            </div>
-          </div>
-        </div>
-
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-slate-800">Start your Journey</h2>
-            <p className="text-slate-500 text-sm mt-1">View important deadlines, events, and reminders related to your documents.</p>
-          </div>
-          <button 
-            onClick={handleOpenNew}
-            className="bg-[#0f172a] hover:bg-blue-800 text-white px-5 py-2.5 rounded-md text-xs font-medium flex items-center gap-2 transition-colors shadow-sm"
-          >Add event
-          </button>
-        </header>
-
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <>
+      <PortalShell
+        portalTitle="Coach Portal"
+        navItems={[
+          { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, active: activeTab === 'dashboard', onClick: () => setActiveTab('dashboard') },
+          { id: 'schedule', label: 'Schedule', icon: <Calendar className="w-5 h-5" />, active: activeTab === 'schedule', onClick: () => setActiveTab('schedule') },
+          { id: 'team', label: 'Team', icon: <Users className="w-5 h-5" />, active: activeTab === 'team', onClick: () => setActiveTab('team') },
+          { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, active: false, onClick: () => setIsSettingsOpen(true) },
+        ]}
+      >
+        <div className="p-8 max-w-7xl mx-auto font-sans text-slate-900 relative">
           
-          {/* Left Column: Calendar */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <EventCalendar 
-              events={events as any} 
-              isLoading={isLoading} 
-              onMonthChange={(_y, _m) => {}} 
-              // WIRED UP CALENDAR ACTIONS
-              canManage={true}
-              onDelete={handleDeleteFromCalendar}
-              onEdit={(ev: any) => handleOpenEdit(ev)} 
-            />
-          </div>
-
-          {/* Right Column: Widgets */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Events</h3>
-              <ul className="space-y-4">
-                {upcomingEvents.length === 0 && <p className="text-xs text-slate-400">No upcoming events.</p>}
-                {upcomingEvents.map(evt => (
-                  <li 
-                    key={evt?.id || Math.random()} 
-                    onClick={() => handleOpenEdit(evt)}
-                    className="flex gap-4 items-start cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors -ml-2"
-                  >
-                    <div className="bg-[#0f172a] text-white rounded-md w-10 h-10 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-sm font-bold">{evt?.event_date ? new Date(evt.event_date).getDate() : ''}</span>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-700">{evt?.title}</h4>
-                      <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
-                        <Clock className="w-3 h-3" /> {evt?.event_time}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+          {/* Shared Top Header (Search Bar & Profile Avatar) */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input type="text" placeholder="Search..." className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-200 rounded-full text-sm outline-none focus:border-blue-500 shadow-sm transition-colors" />
             </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Deadline</h3>
-              <ul className="space-y-4">
-                {upcomingDeadlines.length === 0 && <p className="text-xs text-slate-400">No deadlines.</p>}
-                {upcomingDeadlines.map(deadline => (
-                  <li 
-                    key={deadline?.id || Math.random()} 
-                    onClick={() => handleOpenEdit(deadline)}
-                    className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors -ml-2"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs font-medium text-slate-700 truncate max-w-[120px]">{deadline?.title}</span>
-                    </div>
-                    {/* DYNAMIC STATUS BADGE */}
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md ${
-                      deadline?.status === 'Completed' 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-amber-100 text-amber-600'
-                    }`}>
-                      {deadline?.status || 'Pending'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* --- ADD/EDIT EVENT MODAL --- */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-              <div className="flex justify-between items-center p-6 border-b border-slate-100">
-                <h3 className="font-bold text-lg text-slate-800">{editingId ? 'Edit Schedule' : 'Add New Schedule'}</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
+            <div className="flex items-center gap-6">
+              <button className="text-slate-400 hover:text-slate-800 transition-colors">
+                <Bell className="w-5 h-5 fill-current" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#0f172a] rounded-full flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                  <span className="text-white font-bold text-sm uppercase">{profileName ? profileName.charAt(0) : 'C'}</span>
+                </div>
+                <div className="flex flex-col hidden sm:flex">
+                  <span className="text-sm font-bold text-slate-800 leading-tight">{profileName}</span>
+                  <span className="text-[10px] font-medium text-slate-500 capitalize">{profileSport}</span>
+                </div>
               </div>
-              
-              <form onSubmit={handleSaveEvent} className="p-6 space-y-4">
-                {errorMessage && (
-                  <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg">
-                    {errorMessage}
-                  </div>
-                )}
-                
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Title</label>
-                  <input type="text" required value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600" />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Date</label>
-                    <input type="date" required value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Time</label>
-                    <input type="time" required value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Type</label>
-                    <select value={newEvent.type} onChange={e => setNewEvent({...newEvent, type: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600 bg-white">
-                      <option value="event">General Event </option>
-                      <option value="meeting">Meeting </option>
-                      <option value="deadline">Document Deadline </option>
-                    </select>
-                  </div>
-                  {/* NEW STATUS DROPDOWN */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Status</label>
-                    <select value={newEvent.status} onChange={e => setNewEvent({...newEvent, status: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600 bg-white">
-                      <option value="Pending">Pending</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="pt-4 flex gap-3 justify-between items-center border-t border-slate-100 mt-4">
-                  {editingId ? (
-                    <button type="button" onClick={handleDeleteEvent} className="flex items-center gap-1 px-3 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </button>
-                  ) : <div></div>}
-                  
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                    <button type="submit" className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-600/20">
-                      {editingId ? 'Save Changes' : 'Save Schedule'}
-                    </button>
-                  </div>
-                </div>
-              </form>
             </div>
           </div>
-        )}
 
-      </div>
-    </PortalShell>
+          {/* Inject the selected tab content */}
+          <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400 font-medium animate-pulse">Loading...</div>}>
+            {renderActiveView()}
+          </Suspense>
+
+        </div>
+      </PortalShell>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && <SettingsView onClose={() => setIsSettingsOpen(false)} />}
+    </>
   );
 }

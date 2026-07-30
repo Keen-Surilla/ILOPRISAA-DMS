@@ -162,8 +162,8 @@ export default function LandingPage() {
       `}</style>
 
       {/* NAVBAR */}
-      <header className="px-6 md:px-10 py-5 flex justify-between items-center border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur z-20">
-        <img src={Logo2} alt="ILOPRISAA" className="h-9 w-auto" />
+      <header className="px-6 md:px-15 py-5 flex justify-between items-center border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur z-20">
+        <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
         <nav className="hidden md:flex gap-8 text-sm font-semibold text-slate-600">
           {NAV_LINKS.map((link) => {
             const isActive = activeSection === link.id;

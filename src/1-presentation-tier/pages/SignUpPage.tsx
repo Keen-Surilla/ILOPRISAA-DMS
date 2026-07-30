@@ -86,7 +86,7 @@ export default function SignUpPage() {
           <img 
             src={Logo2} 
             alt="ILOPRISAA Logo" 
-            className="w-[180px] h-[60px] object-contain flex-none" 
+            className="w-auto h-7 object-contain flex-none" 
           />
         </div>
         

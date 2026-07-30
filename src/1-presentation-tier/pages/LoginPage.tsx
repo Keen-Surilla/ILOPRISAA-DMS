@@ -59,7 +59,7 @@ export default function LoginPage() {
           <img 
             src={Logo2} 
             alt="ILOPRISAA Logo" 
-            className="h-9 w-auto object-contain flex-none" 
+            className="h-7 w-auto object-contain flex-none" 
           />
         </div>
 

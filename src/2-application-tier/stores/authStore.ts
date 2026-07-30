@@ -28,8 +28,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   role: null,
   isAuthenticated: false,
-  isLoading: true,
-
+  isLoading: true, // <-- This is true by default
+  
   initialize: async () => {
     set({ isLoading: true });
     const { data: { session } } = await supabase.auth.getSession();
@@ -128,22 +128,22 @@ function mapAuthSignInError(error: { code?: string; message?: string; status?: n
   const message = (error.message ?? '').toLowerCase();
 
   if (code === 'email_not_confirmed' || message.includes('email not confirmed')) {
-    return 'Email not confirmed. In Supabase, confirm the user or enable Auto Confirm when creating the account.';
+    return 'Email not confirmed';
   }
   if (code === 'invalid_credentials' || message.includes('invalid login credentials')) {
-    return 'Invalid email or password. Use the exact email from Authentication → Users and reset the password if needed.';
+    return 'Invalid email or password';
   }
   if (code === 'user_banned' || message.includes('banned')) {
-    return 'This account has been disabled. Contact your administrator.';
+    return 'This account has been disabled. Contact your administrator';
   }
   if (error.status === 429 || message.includes('rate limit')) {
     return 'Too many attempts. Please wait a moment and try again.';
   }
   if (error.status === 502) {
-    return 'Supabase returned Bad Gateway (502). Your VITE_SUPABASE_URL is wrong or the project does not exist. In Supabase Dashboard → Project Settings → API, copy Project URL into .env.local exactly, then restart npm run dev.';
+    return 'Supabase returned Bad Gateway (502)';
   }
   if (error.status === 0 || message.includes('failed to fetch')) {
-    return 'Cannot reach Supabase. Check internet/VPN/firewall, or fix VITE_SUPABASE_URL in .env.local (Dashboard → Project Settings → API).';
+    return 'Cannot reach Supabase';
   }
   return 'Invalid email or password.';
 }

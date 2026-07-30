@@ -13,13 +13,23 @@
 export type DocumentStatus = 'draft' | 'pending_review' | 'verified' | 'action_required';
 export type UserRole = 'athlete' | 'coach' | 'admin' | 'committee';
 export type EventKind = 'game_start' | 'document_deadline' | 'waiver_deadline' | 'form_deadline' | 'other';
+// Replaces the old generic set with the exact 9 required checklist slots
+// for an athlete's document requirements.
 export type DocumentType =
-  | 'psa_certificate'
-  | 'medical_clearance'
-  | 'birth_certificate'
-  | 'school_id'
+  | 'transcript_sem1'
+  | 'transcript_sem2'
+  | 'birth_cert_original'
+  | 'birth_cert_xerox'
+  | 'medical_cert_1'
+  | 'medical_cert_2'
   | 'parental_consent'
-  | 'physical_exam';
+  | 'id_picture_1'
+  | 'id_picture_2';
+
+// 'meeting' added so it's a real, persisted value instead of being
+// silently collapsed into 'event' at save time (see allow_meeting_type_migration.sql).
+export type EventType = 'event' | 'deadline' | 'meeting';
+export type EventStatus = 'Pending' | 'Completed';
 
 export interface Database {
   public: {
@@ -32,6 +42,7 @@ export interface Database {
           email: string;
           institution_id: string | null;
           avatar_url: string | null;
+          team_motto: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -90,25 +101,19 @@ export interface Database {
         >>;
         Relationships: [];
       };
-      calendar_events: {
+      events: {
         Row: {
           id: string;
           title: string;
-          description: string | null;
-          event_kind: EventKind;
-          starts_at: string;
-          ends_at: string | null;
-          created_by: string;
+          event_date: string;
+          event_time: string;
+          type: EventType;
+          status: EventStatus;
+          user_id: string;
           created_at: string;
-          updated_at: string;
         };
-        Insert: Omit<
-          Database['public']['Tables']['calendar_events']['Row'],
-          'id' | 'created_at' | 'updated_at'
-        >;
-        Update: Partial<
-          Omit<Database['public']['Tables']['calendar_events']['Insert'], 'created_by'>
-        >;
+        Insert: Omit<Database['public']['Tables']['events']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['events']['Insert']>;
         Relationships: [];
       };
       audit_logs: {
@@ -125,6 +130,22 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>;
         Update: never; // Audit logs are write-once, append-only
+        Relationships: [];
+      };
+      // NOTE: this looks like a separate, informal roster table living
+      // alongside profiles/coach_athlete_assignments. Adding it here at
+      // least lets Supabase's client validate queries against it instead
+      // of everything being silently 'as any'.
+      team_members: {
+        Row: {
+          id: string;
+          name: string;
+          email: string;
+          role: string;
+          coach_id: string;
+        };
+        Insert: Omit<Database['public']['Tables']['team_members']['Row'], 'id'>;
+        Update: Partial<Database['public']['Tables']['team_members']['Insert']>;
         Relationships: [];
       };
     };
@@ -164,6 +185,5 @@ export type Document = Database['public']['Tables']['documents']['Row'];
 export type Institution = Database['public']['Tables']['institutions']['Row'];
 export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
 export type CoachAthleteAssignment = Database['public']['Tables']['coach_athlete_assignments']['Row'];
-export type CalendarEvent = Database['public']['Tables']['calendar_events']['Row'];
-export type CalendarEventInsert = Database['public']['Tables']['calendar_events']['Insert'];
-
+export type CalendarEvent = Database['public']['Tables']['events']['Row'];
+export type CalendarEventInsert = Database['public']['Tables']['events']['Insert'];

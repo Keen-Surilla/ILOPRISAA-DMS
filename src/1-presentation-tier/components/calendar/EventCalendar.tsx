@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import type { CalendarEvent, EventKind } from '../../../3-data-tier/types/database.types';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import type { EventKind } from '../../../3-data-tier/types/database.types';
+import type { CalendarEventRow } from '../../../3-data-tier/services/eventService';
 import { buildMonthGrid, clampCalendarYear, getCalendarYearBounds } from '../../../2-application-tier/utils/calendarBounds';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -14,51 +16,96 @@ export interface NewEventInput {
 }
 
 interface EventCalendarProps {
-  events: any[]; // Using any to bypass strict structural checks here
+  events: CalendarEventRow[];
   isLoading?: boolean;
   canManage?: boolean;
   onMonthChange: (year: number, monthIndex: number) => void;
   onCreate?: (input: NewEventInput) => Promise<boolean>;
   onDelete?: (eventId: string) => Promise<boolean>;
-  onEdit?: (event: any) => void;
+  onEdit?: (event: CalendarEventRow) => void;
 }
 
-export function EventCalendar({ events, isLoading, canManage, onMonthChange, onCreate, onDelete, onEdit }: EventCalendarProps) {
-  const today = new Date();
+// Pure function, doesn't touch component state/props — pulled out of the
+// component body so it isn't re-created as a new closure on every render.
+function getEventStyle(ev: CalendarEventRow): string {
+  if (ev.status === 'Completed') return 'bg-green-100 text-green-800 border-green-200';
+  if (ev.type === 'meeting') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+  if (ev.type === 'deadline') return 'bg-red-50 text-red-700 border-red-200';
+  return 'bg-blue-100 text-blue-800 border-blue-200';
+}
+
+function dateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function EventCalendar({ events, isLoading, canManage, onMonthChange, onDelete, onEdit }: EventCalendarProps) {
+  const today = useMemo(() => new Date(), []);
   const [year, setYear] = useState(today.getFullYear());
   const [monthIndex, setMonthIndex] = useState(today.getMonth());
-  
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const { minYear, maxYear } = getCalendarYearBounds();
-  const weeks = useMemo(() => buildMonthGrid(year, monthIndex), [year, monthIndex]);
+
+  // Flattening a memoized 6x7 grid is cheap, but folding it into the same
+  // memo avoids a second array allocation on every render.
+  const flatDays = useMemo(() => buildMonthGrid(year, monthIndex).flat(), [year, monthIndex]);
 
   useEffect(() => {
     onMonthChange(year, monthIndex);
   }, [year, monthIndex, onMonthChange]);
 
-  const shiftMonth = (delta: number) => {
-    let m = monthIndex + delta; let y = year;
+  const shiftMonth = useCallback((delta: number) => {
+    let m = monthIndex + delta;
+    let y = year;
     while (m < 0) { m += 12; y -= 1; }
     while (m > 11) { m -= 12; y += 1; }
     y = clampCalendarYear(y);
     if (y >= minYear && y <= maxYear) { setYear(y); setMonthIndex(m); }
-  };
+  }, [monthIndex, year, minYear, maxYear]);
 
   const eventsByDay = useMemo(() => {
-    const map = new Map<string, any[]>();
+    const map = new Map<string, CalendarEventRow[]>();
     for (const ev of events) {
-      const key = ev.starts_at?.slice(0, 10);
+      const key = ev.event_date?.slice(0, 10);
       if (key) map.set(key, [...(map.get(key) ?? []), ev]);
     }
     return map;
   }, [events]);
 
-  // SMART COLOR LOGIC based on your rules!
-  const getEventStyle = (ev: any) => {
-    if (ev.status === 'Completed') return 'bg-green-100 text-green-800 border-green-200'; // Passed/Completed
-    if (ev.type === 'meeting') return 'bg-yellow-100 text-yellow-800 border-yellow-300'; // Meetings
-    if (ev.type === 'deadline') return 'bg-red-50 text-red-700 border-red-200'; // Deadlines
-    return 'bg-blue-100 text-blue-800 border-blue-200'; // General Upcoming Events
-  };
+  const handleEditClick = useCallback((ev: CalendarEventRow) => {
+    // Gate edit behind canManage on the client too — even though the
+    // service layer rejects unauthorized writes, we shouldn't invite a
+    // read-only viewer to open an edit form they can't actually submit.
+    if (!canManage || !onEdit) return;
+    onEdit(ev);
+  }, [canManage, onEdit]);
+
+  const handleDeleteClick = useCallback((e: React.MouseEvent, eventId: string, title: string) => {
+    e.stopPropagation();
+    if (!onDelete) return;
+    // Open a styled in-app confirmation instead of the browser's window.confirm()
+    setDeleteTarget({ id: eventId, title });
+  }, [onDelete]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget || !onDelete) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(deleteTarget.id);
+      setDeleteTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteTarget, onDelete]);
+
+  const cancelDelete = useCallback(() => {
+    if (isDeleting) return; // don't let a stray click dismiss mid-request
+    setDeleteTarget(null);
+  }, [isDeleting]);
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -76,14 +123,10 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onC
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
           <div key={d} className="bg-slate-50 py-2 text-center text-xs font-semibold text-slate-500 uppercase">{d}</div>
         ))}
-        {weeks.flat().map((date, i) => {
+        {flatDays.map((date, i) => {
           if (!date) return <div key={`empty-${i}`} className="bg-white min-h-[88px]" />;
-          
-          const y = date.getFullYear();
-          const m = String(date.getMonth() + 1).padStart(2, '0');
-          const d = String(date.getDate()).padStart(2, '0');
-          const key = `${y}-${m}-${d}`;
-          
+
+          const key = dateKey(date);
           const dayEvents = eventsByDay.get(key) ?? [];
           const hasEvents = dayEvents.length > 0;
           const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
@@ -93,18 +136,25 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onC
               <span className={`text-xs font-semibold flex items-center justify-center w-6 h-6 rounded-md ${isToday ? 'bg-blue-600 text-white shadow-sm' : hasEvents ? 'bg-blue-100 text-blue-800' : 'text-slate-600'}`}>
                 {date.getDate()}
               </span>
-              
+
               <div className="mt-1.5 space-y-1">
-                {dayEvents.map((ev) => (
+                {dayEvents.map((ev, idx) => (
                   <div
-                    key={ev.id}
-                    onClick={() => onEdit && onEdit(ev)}
-                    className={`cursor-pointer text-[10px] font-medium leading-tight px-1.5 py-1 rounded border truncate flex items-center justify-between gap-1 shadow-sm transition-transform hover:scale-[1.02] ${getEventStyle(ev)}`}
+                    key={ev.id ?? `${key}-${idx}`}
+                    role={canManage ? 'button' : undefined}
+                    tabIndex={canManage ? 0 : undefined}
+                    onClick={() => handleEditClick(ev)}
+                    className={`text-[10px] font-medium leading-tight px-1.5 py-1 rounded border truncate flex items-center justify-between gap-1 shadow-sm transition-transform ${canManage ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'} ${getEventStyle(ev)}`}
                     title={ev.title}
                   >
                     <span className="truncate">{ev.title}</span>
                     {canManage && onDelete && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(ev.id); }} className="shrink-0 opacity-60 hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteClick(e, ev.id, ev.title)}
+                        className="shrink-0 opacity-60 hover:opacity-100"
+                        aria-label={`Delete ${ev.title}`}
+                      >
                         <Trash2 className="w-3 h-3" />
                       </button>
                     )}
@@ -115,6 +165,18 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onC
           );
         })}
       </div>
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete event?"
+        message={deleteTarget ? `This will permanently delete "${deleteTarget.title}". This can't be undone.` : ''}
+        confirmText="Delete"
+        confirmLoadingText="Deleting…"
+        isDestructive
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </div>
   );
 }

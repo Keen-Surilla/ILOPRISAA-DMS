@@ -11,7 +11,8 @@
  */
 
 export type DocumentStatus = 'draft' | 'pending_review' | 'verified' | 'action_required';
-export type UserRole = 'athlete' | 'coach' | 'admin';
+export type UserRole = 'athlete' | 'coach' | 'admin' | 'committee';
+export type EventKind = 'game_start' | 'document_deadline' | 'waiver_deadline' | 'form_deadline' | 'other';
 export type DocumentType =
   | 'psa_certificate'
   | 'medical_clearance'
@@ -20,26 +21,28 @@ export type DocumentType =
   | 'parental_consent'
   | 'physical_exam';
 
+// 'meeting' added so it's a real, persisted value instead of being
+// silently collapsed into 'event' at save time (see allow_meeting_type_migration.sql).
+export type EventType = 'event' | 'deadline' | 'meeting';
+export type EventStatus = 'Pending' | 'Completed';
+
 export interface Database {
   public: {
     Tables: {
       profiles: {
         Row: {
-          id: string;               // UUID - matches auth.users.id (FK)
+          id: string;               // UUID — matches auth.users.id (FK)
           role: UserRole;
           full_name: string;
           email: string;
           institution_id: string | null;
-          phone: string | null;     // NEW
-          dob: string | null;       // NEW
-          gender: string | null;    // NEW
-          sport: string | null;     // NEW
           avatar_url: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
+        Relationships: [];
       };
       institutions: {
         Row: {
@@ -50,6 +53,7 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['institutions']['Row'], 'id' | 'created_at'>;
         Update: Partial<Database['public']['Tables']['institutions']['Insert']>;
+        Relationships: [];
       };
       coach_athlete_assignments: {
         Row: {
@@ -61,6 +65,7 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['coach_athlete_assignments']['Row'], 'id' | 'assigned_at'>;
         Update: never; // Assignments are immutable; revoke then re-assign
+        Relationships: [];
       };
       documents: {
         Row: {
@@ -88,6 +93,22 @@ export interface Database {
           Database['public']['Tables']['documents']['Row'],
           'status' | 'notes' | 'reviewed_by' | 'reviewed_at' | 'digital_signature' | 'metadata'
         >>;
+        Relationships: [];
+      };
+      events: {
+        Row: {
+          id: string;
+          title: string;
+          event_date: string;
+          event_time: string;
+          type: EventType;
+          status: EventStatus;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['events']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['events']['Insert']>;
+        Relationships: [];
       };
       audit_logs: {
         Row: {
@@ -103,38 +124,7 @@ export interface Database {
         };
         Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>;
         Update: never; // Audit logs are write-once, append-only
-      };
-      events: {
-        Row: {
-          id: string;
-          title: string;
-          event_date: string;
-          event_time: string;
-          type: 'event' | 'deadline';
-          status: 'Pending' | 'Completed';
-          user_id: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          title: string;
-          event_date: string;
-          event_time: string;
-          type: 'event' | 'deadline';
-          status?: 'Pending' | 'Completed';
-          user_id: string;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          title?: string;
-          event_date?: string;
-          event_time?: string;
-          type?: 'event' | 'deadline';
-          status?: 'Pending' | 'Completed';
-          user_id?: string;
-          created_at?: string;
-        };
+        Relationships: [];
       };
     };
     Views: {
@@ -148,18 +138,21 @@ export interface Database {
           pending_count: number;
           action_required_count: number;
         };
+        Relationships: [];
       };
     };
     Functions: {
       get_my_role: {
         Args: Record<string, never>;
         Returns: UserRole;
+        Relationships: [];
       };
     };
     Enums: {
       document_status: DocumentStatus;
       user_role: UserRole;
       document_type: DocumentType;
+      event_kind: EventKind;
     };
   };
 }
@@ -170,4 +163,5 @@ export type Document = Database['public']['Tables']['documents']['Row'];
 export type Institution = Database['public']['Tables']['institutions']['Row'];
 export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
 export type CoachAthleteAssignment = Database['public']['Tables']['coach_athlete_assignments']['Row'];
-export type EventRow = Database['public']['Tables']['events']['Row'];
+export type CalendarEvent = Database['public']['Tables']['events']['Row'];
+export type CalendarEventInsert = Database['public']['Tables']['events']['Insert'];
