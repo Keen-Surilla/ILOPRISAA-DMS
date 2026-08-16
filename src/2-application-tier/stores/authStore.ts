@@ -1,10 +1,12 @@
-
-
 import { create } from 'zustand';
 import { supabase } from '../../3-data-tier/config/SupabaseClient';
-import type { Profile, UserRole } from '../../3-data-tier/types/database.types';
+import type { Profile, UserRole } from '../../3-data-tier/types/database.types.extras';
+
+
 
 interface AuthState {
+  sendAthleteOtp: (email: string) => Promise<{ error: string | null }>;
+  verifyAthleteOtp: (email: string, token: string) => Promise<{ error: string | null }>;
   user: Profile | null;
   role: UserRole | null;
   isAuthenticated: boolean;
@@ -24,11 +26,86 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+const AUTH_TIMEOUT_MS = 15_000;
+
+
+function withTimeout<T>(operation: () => PromiseLike<T>, timeoutMessage: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(timeoutMessage)), AUTH_TIMEOUT_MS);
+  });
+  return Promise.race([Promise.resolve(operation()), timeout]).finally(() => clearTimeout(timer));
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   role: null,
   isAuthenticated: false,
-  isLoading: true, // <-- This is true by default
+  isLoading: true, 
+
+sendAthleteOtp: async (email: string) => {
+  set({ isLoading: true });
+  try {
+    const { error } = await withTimeout(
+      () => supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: true }
+      }),
+      'Sending the code timed out. Please check your connection and try again.'
+    );
+    console.log('OTP send result, full error object:', error);
+    return { error: error ? error.message : null };
+  } catch (err: any) {
+      return { error: err?.message || 'Could not send the code. Please try again.' };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  verifyAthleteOtp: async (email: string, token: string) => {
+    set({ isLoading: true });
+    try {
+      const { data, error } = await withTimeout(
+        () => supabase.auth.verifyOtp({ email: email.trim(), token: token.trim(), type: 'email' }),
+        'Verifying the code timed out. Please check your connection and try again.'
+      );
+
+      if (error) {
+        return { error: "Invalid or expired PIN. Please try again." };
+      }
+
+      const { error: linkError } = await withTimeout(
+        () => supabase.rpc('link_athlete_account' as any),
+        'Verifying your roster access timed out. Please try again.'
+      );
+
+      if (linkError) {
+        await supabase.auth.signOut();
+        const message = linkError.message.includes('NO_ROSTER_MATCH')
+          ? "Access Denied: Your coach has not added this email to the team roster yet."
+          : "We couldn't verify your athlete account. Please try again or contact your coach.";
+        return { error: message };
+      }
+
+      if (data.user) {
+        const profile = await withTimeout(
+          () => fetchProfile(data.user!.id),
+          'Loading your profile timed out. Please try signing in again.'
+        );
+        if (!profile) {
+          await supabase.auth.signOut();
+          return { error: 'Your account is missing a profile. Please contact your coach or an admin.' };
+        }
+        set({ user: profile, role: profile.role, isAuthenticated: true });
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err?.message || 'Verification failed. Please try again.' };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
   
   initialize: async () => {
     set({ isLoading: true });
@@ -108,17 +185,15 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     try {
-      // 1. Tell Supabase to end the session
-      const { error } = await supabase.auth.signOut();
+      const { error } = await withTimeout(
+        () => supabase.auth.signOut(),
+        'Sign out timed out.'
+      );
       if (error) throw error;
-      
-      // 2. Clear the local frontend state
-      set({ user: null, role: null });
     } catch (error) {
       console.error("Error during sign out:", error);
-      // Even if Supabase fails to sign out (e.g. network issue), 
-      // we should still clear local state to force them out of the portal
-      set({ user: null, role: null });
+    } finally {
+      set({ user: null, role: null, isAuthenticated: false });
     }
   },
 }));

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
-import type { EventKind } from '../../../3-data-tier/types/database.types';
+import type { EventKind } from '../../../3-data-tier/types/database.types.extras';
 import type { CalendarEventRow } from '../../../3-data-tier/services/eventService';
 import { buildMonthGrid, clampCalendarYear, getCalendarYearBounds } from '../../../2-application-tier/utils/calendarBounds';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';

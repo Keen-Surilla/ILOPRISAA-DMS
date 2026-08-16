@@ -8,21 +8,20 @@ import Logo1 from '../../assets/Logo1.svg';
 import Logo2 from '../../assets/Logo2.svg';
 
 export default function LoginPage() {
-  // Changed from username to email to match Supabase requirements
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { signIn, isLoading } = useAuthStore();
+  const { signIn } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     
-    // TIER 2 DELEGATION: Validate the email and password
     const validation = validateLoginInput(email, password);
     
     if (!validation.valid) {
@@ -30,17 +29,22 @@ export default function LoginPage() {
       return;
     }
 
-    // Safely use the sanitized email from Tier 2
     const safeEmail = validation.sanitizedEmail!;
     
-    // Proceed with authentication using the exact email
-    const result = await signIn(safeEmail, password);
-    
-    if (result.error) {
-      setError(result.error);
-      return;
+    setIsSubmitting(true);
+    try {
+      const result = await signIn(safeEmail, password);
+
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      navigate('/home', { replace: true });
+    } catch (err: any) {
+      setError(err?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-    navigate('/home', { replace: true });
   };
 
   return (
@@ -55,12 +59,7 @@ export default function LoginPage() {
           >
             <ChevronLeft className="h-8 w-8" />
           </button>
-          
-          <img 
-            src={Logo2} 
-            alt="ILOPRISAA Logo" 
-            className="h-7 w-auto object-contain flex-none" 
-          />
+          <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
         </div>
 
         <div className="flex items-center gap-4 text-sm">
@@ -95,13 +94,13 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
                 Email
               </label>
               <input 
                 type="email" 
                 required 
-                maxLength={100} // Tier 1 HTML defense
+                maxLength={100} 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400" 
@@ -110,14 +109,14 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
                 Password
               </label>
               <div className="relative">
                 <input 
                   type={showPassword ? "text" : "password"} 
                   required 
-                  maxLength={50} // Tier 1 HTML defense
+                  maxLength={50} 
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
                   className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden" 
@@ -149,10 +148,10 @@ export default function LoginPage() {
 
             <button 
               type="submit" 
-              disabled={isLoading} 
+              disabled={isSubmitting} 
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl mt-2 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-md shadow-blue-600/10 active:scale-[0.99]"
             >
-              {isLoading ? 'Processing...' : 'Login'}
+              {isSubmitting ? 'Processing...' : 'Login'}
             </button>
           </form>
 

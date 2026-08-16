@@ -1,5 +1,8 @@
 import { supabase } from '../config/SupabaseClient';
-import type { Database, DocumentType } from '../types/database.types';
+import type { Database } from '../types/database.types';
+import type { DocumentType } from '../types/database.types.extras';
+
+import { withAuthRetry } from '../../2-application-tier/utils/withAuthRetry';
 
 export type DocumentRow = Database['public']['Tables']['documents']['Row'];
 
@@ -11,7 +14,6 @@ export interface DocumentCategoryItem {
 export interface DocumentCategory {
   id: string;
   title: string;
-  description: string;
   items: DocumentCategoryItem[];
 }
 
@@ -22,7 +24,6 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   {
     id: 'academic_records',
     title: 'Academic Records',
-    description: "These verify the athlete's enrollment and scholastic standing.",
     items: [
       { type: 'transcript_sem1', label: 'Transcript Semester 1' },
       { type: 'transcript_sem2', label: 'Transcript Semester 2' },
@@ -31,7 +32,6 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   {
     id: 'civil_identity',
     title: 'Civil Identity Documents',
-    description: 'These establish the legal identity and age of the athlete.',
     items: [
       { type: 'birth_cert_original', label: 'Original Birth Certificate' },
       { type: 'birth_cert_xerox', label: 'Xerox Birth Certificate' },
@@ -40,7 +40,6 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   {
     id: 'medical_clearances',
     title: 'Medical Clearances',
-    description: 'These ensure the athlete is physically fit to compete safely.',
     items: [
       { type: 'medical_cert_1', label: 'Medical Certificate 1' },
       { type: 'medical_cert_2', label: 'Medical Certificate 2' },
@@ -49,16 +48,14 @@ export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   {
     id: 'visual_identification',
     title: 'Visual Identification',
-    description: 'These are used for creating official league IDs and roster sheets.',
     items: [
-      { type: 'id_picture_1', label: 'ID Picture 1' },
-      { type: 'id_picture_2', label: 'ID Picture 2' },
+      { type: 'id_picture_1', label: '2x2 Picture 1' },
+      { type: 'id_picture_2', label: '2x2 Picture 2' },
     ],
   },
   {
     id: 'legal_consent',
     title: 'Legal & Consent Requirements',
-    description: 'This ensures minors or dependents have permission to participate.',
     items: [
       { type: 'parental_consent', label: 'Parental Consent' },
     ],
@@ -112,17 +109,6 @@ function fileExtension(filename: string): string {
   return idx >= 0 ? filename.slice(idx) : '';
 }
 
-// Wraps an operation so it can never hang the UI forever — if the
-// underlying request (network stall, misconfigured storage policy, etc.)
-// never settles, this rejects with a clear, actionable error instead of
-// spinning silently.
-//
-// Takes a THUNK (() => PromiseLike<T>), not the promise itself — passing a
-// Supabase query builder directly into a generic Promise<T> parameter
-// breaks TypeScript's inference (its .then() has its own complex generic
-// signature), which is what caused the "Property 'data' does not exist on
-// type 'unknown'" error. Wrapping it in an arrow function and using
-// Promise.race lets TS correctly infer T from the builder's return type.
 function withTimeout<T>(operation: () => PromiseLike<T>, ms: number, timeoutMessage: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
@@ -136,10 +122,10 @@ function withTimeout<T>(operation: () => PromiseLike<T>, ms: number, timeoutMess
 
 export const documentsApi = {
   async getDocumentsForAthlete(athleteId: string): Promise<DocumentRow[]> {
-    const { data, error } = await supabase
+    const { data, error } = await withAuthRetry(() => supabase
       .from('documents')
       .select('*')
-      .eq('athlete_id', athleteId);
+      .eq('athlete_id', athleteId));
 
     if (error) {
       console.error('API Error fetching documents:', error);
@@ -153,10 +139,10 @@ export const documentsApi = {
   async getDocumentCountsForAthletes(athleteIds: string[]): Promise<Record<string, number>> {
     if (athleteIds.length === 0) return {};
 
-    const { data, error } = await supabase
+    const { data, error } = await withAuthRetry(() => supabase
       .from('documents')
       .select('athlete_id, document_type')
-      .in('athlete_id', athleteIds);
+      .in('athlete_id', athleteIds));
 
     if (error) {
       console.error('API Error fetching document counts:', error);
@@ -177,10 +163,10 @@ export const documentsApi = {
   async getDocumentStatusCounts(athleteIds: string[]): Promise<Record<string, number>> {
     if (athleteIds.length === 0) return {};
 
-    const { data, error } = await supabase
+    const { data, error } = await withAuthRetry(() => supabase
       .from('documents')
       .select('status')
-      .in('athlete_id', athleteIds);
+      .in('athlete_id', athleteIds));
 
     if (error) {
       console.error('API Error fetching document status counts:', error);
@@ -200,10 +186,10 @@ export const documentsApi = {
   async getUploadTimestamps(athleteIds: string[]): Promise<string[]> {
     if (athleteIds.length === 0) return [];
 
-    const { data, error } = await supabase
+    const { data, error } = await withAuthRetry(() => supabase
       .from('documents')
       .select('created_at')
-      .in('athlete_id', athleteIds);
+      .in('athlete_id', athleteIds));
 
     if (error) {
       console.error('API Error fetching upload timestamps:', error);
@@ -218,11 +204,11 @@ export const documentsApi = {
     const digitalSignature = await hashFile(file);
     const storagePath = `${athleteId}/${documentType}${fileExtension(file.name)}`;
 
-    const { error: uploadError } = await withTimeout(
+    const { error: uploadError } = await withAuthRetry(() => withTimeout(
       () => supabase.storage.from(BUCKET).upload(storagePath, file, { upsert: true, contentType: file.type }),
       UPLOAD_TIMEOUT_MS,
       'Upload timed out. Please check your connection and try again.'
-    );
+    ));
 
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
@@ -232,7 +218,7 @@ export const documentsApi = {
     // Upsert so re-uploading a slot replaces its existing row instead of
     // creating a duplicate — relies on the unique(athlete_id, document_type)
     // constraint from documents_requirements_migration.sql.
-    const { data, error } = await withTimeout(
+    const { data, error } = await withAuthRetry(() => withTimeout(
       () => supabase
         .from('documents')
         .upsert(
@@ -254,7 +240,7 @@ export const documentsApi = {
         .single(),
       UPLOAD_TIMEOUT_MS,
       'Saving the file record timed out. Please try again.'
-    );
+    ));
 
     if (error || !data) {
       console.error('DB error saving document record:', error);
@@ -265,9 +251,9 @@ export const documentsApi = {
 
   // Bucket is private — files are only accessible via short-lived signed URLs.
   async getSignedUrl(storagePath: string): Promise<string> {
-    const { data, error } = await supabase.storage
+    const { data, error } = await withAuthRetry(() => supabase.storage
       .from(BUCKET)
-      .createSignedUrl(storagePath, 60 * 5); // 5 minutes
+      .createSignedUrl(storagePath, 60 * 5)); // 5 minutes
 
     if (error || !data) {
       throw new DocumentApiError('Could not generate a link to view this file.', 'SIGNED_URL_FAILED');
@@ -276,14 +262,14 @@ export const documentsApi = {
   },
 
   async removeDocument(documentId: string, storagePath: string): Promise<void> {
-    const { error: storageError } = await supabase.storage.from(BUCKET).remove([storagePath]);
+    const { error: storageError } = await withAuthRetry(() => supabase.storage.from(BUCKET).remove([storagePath]));
     if (storageError) {
       // Not fatal — the DB row is the source of truth for "is this slot
       // filled", so still remove the row even if the storage cleanup fails.
       console.error('Storage removal error (continuing):', storageError);
     }
 
-    const { error } = await supabase.from('documents').delete().eq('id', documentId);
+    const { error } = await withAuthRetry(() => supabase.from('documents').delete().eq('id', documentId));
     if (error) {
       console.error('DB error removing document:', error);
       throw describeDbError('Could not remove this document. Please try again.', 'DELETE_FAILED', error);

@@ -1,0 +1,7 @@
+CREATE OR REPLACE FUNCTION calculate_prisaa_age(dob DATE, event_year INT)
+RETURNS INT
+LANGUAGE SQL
+IMMUTABLE
+AS $$
+  SELECT event_year - EXTRACT(YEAR FROM dob)::INT
+$$;

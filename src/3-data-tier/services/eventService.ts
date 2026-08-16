@@ -1,5 +1,6 @@
 import { supabase } from '../config/SupabaseClient';
 import type { Database } from '../types/database.types';
+import { withAuthRetry } from '../../2-application-tier/utils/withAuthRetry';
 
 export class EventServiceError extends Error {
   readonly code: string;
@@ -22,9 +23,7 @@ const VALID_STATUSES = ['Pending', 'Completed'] as const;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}(:\d{2})?$/;
 
-// -----------------------------------------------------------------------
-// Input validation — reject bad data before it ever reaches Supabase.
-// -----------------------------------------------------------------------
+
 function sanitizeTitle(raw: string): string {
   const trimmed = raw.trim().replace(/\s+/g, ' ');
   if (!trimmed) {
@@ -60,9 +59,7 @@ function assertValidStatus(value: string): asserts value is (typeof VALID_STATUS
   }
 }
 
-// Never forward raw Postgres error text to the caller — log it server-side,
-// surface only a safe, generic message. EXCEPT the rate-limit trigger,
-// which we specifically recognize and turn into a clear, actionable message.
+
 function handleDbError(context: string, code: string, error: unknown): never {
   console.error(`[eventService] ${context}:`, error);
 
@@ -79,12 +76,6 @@ function handleDbError(context: string, code: string, error: unknown): never {
 
 const QUERY_TIMEOUT_MS = 15_000;
 
-// Wraps a Supabase call so it can never hang the UI forever — this is what
-// was missing and caused the "stuck on the skeleton" bug: if the underlying
-// request stalls (dropped connection, RLS hiccup, etc.), the promise never
-// settles, so isLoading never flips back to false. Takes a THUNK, not the
-// builder itself — passing the builder directly into a generic Promise<T>
-// breaks TypeScript's inference through its custom .then() signature.
 function withTimeout<T>(operation: () => PromiseLike<T>, timeoutMessage: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
@@ -93,12 +84,8 @@ function withTimeout<T>(operation: () => PromiseLike<T>, timeoutMessage: string)
   return Promise.race([Promise.resolve(operation()), timeout]).finally(() => clearTimeout(timer));
 }
 
-// -----------------------------------------------------------------------
-// Reads
-// -----------------------------------------------------------------------
 
 export interface ListEventsOptions {
-  /** Scope to a single user's events. Omit only for admin/coach-wide views that need it. */
   userId?: string;
   limit?: number;
   offset?: number;
@@ -117,10 +104,10 @@ export async function listEvents(options: ListEventsOptions = {}): Promise<Calen
     query = query.eq('user_id', userId);
   }
 
-  const { data, error } = await withTimeout(
+  const { data, error } = await withAuthRetry(() => withTimeout(
     () => query,
     'Loading events timed out. Please check your connection and try again.'
-  );
+  ));
 
   if (error) {
     handleDbError('load events', 'FETCH_FAILED', error);
@@ -128,9 +115,6 @@ export async function listEvents(options: ListEventsOptions = {}): Promise<Calen
   return (data ?? []) as CalendarEventRow[];
 }
 
-// -----------------------------------------------------------------------
-// Writes
-// -----------------------------------------------------------------------
 
 export interface CreateEventPayload {
   title: string;
@@ -157,10 +141,10 @@ export async function createEvent(payload: CreateEventPayload): Promise<Calendar
     user_id: payload.user_id,
   };
 
-  const { data, error } = await withTimeout(
+  const { data, error } = await withAuthRetry(() => withTimeout(
     () => supabase.from('events').insert(row).select(EVENT_COLUMNS).single(),
     'Saving this event timed out. Please try again.'
-  );
+  ));
 
   if (error || !data) {
     handleDbError('create event', 'INSERT_FAILED', error);
@@ -168,9 +152,6 @@ export async function createEvent(payload: CreateEventPayload): Promise<Calendar
   return data as CalendarEventRow;
 }
 
-// user_id is intentionally excluded — ownership can never be reassigned
-// through an update. Re-create or use an explicit admin-only transfer path
-// if that's ever a real requirement.
 export type UpdateEventPayload = Partial<Omit<CreateEventPayload, 'user_id'>>;
 
 export async function updateEvent(
@@ -184,18 +165,16 @@ export async function updateEvent(
   if (payload.type !== undefined) assertValidType(payload.type);
   if (payload.status !== undefined) assertValidStatus(payload.status);
 
-  const { data, error } = await withTimeout(
+  const { data, error } = await withAuthRetry(() => withTimeout(
     () => supabase
       .from('events')
       .update(payload)
       .eq('id', eventId)
-      // Defense in depth: even if RLS is misconfigured, the app layer still
-      // only lets a user touch their own rows.
       .eq('user_id', requestingUserId)
       .select(EVENT_COLUMNS)
       .single(),
     'Updating this event timed out. Please try again.'
-  );
+  ));
 
   if (error || !data) {
     handleDbError('update event', 'UPDATE_FAILED', error);
@@ -204,21 +183,19 @@ export async function updateEvent(
 }
 
 export async function deleteEvent(eventId: string, requestingUserId: string): Promise<void> {
-  const { error, count } = await withTimeout(
+  const { error, count } = await withAuthRetry(() => withTimeout(
     () => supabase
       .from('events')
       .delete({ count: 'exact' })
       .eq('id', eventId)
       .eq('user_id', requestingUserId),
     'Deleting this event timed out. Please try again.'
-  );
+  ));
 
   if (error) {
     handleDbError('delete event', 'DELETE_FAILED', error);
   }
   if (!count) {
-    // Either the event didn't exist, or it belongs to someone else — don't
-    // distinguish, to avoid leaking which case it was.
     throw new EventServiceError('Event not found.', 'NOT_FOUND');
   }
 }

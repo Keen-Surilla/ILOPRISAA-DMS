@@ -17,9 +17,6 @@ interface EventFormState {
 
 const EMPTY_FORM: EventFormState = { title: '', date: '', time: '', type: 'event', status: 'Pending' };
 
-// Hoisted outside the component so these aren't recreated on every render,
-// and adding a new event type is a one-line change here instead of
-// copy-pasting a whole new button block in the JSX below.
 const EVENT_TYPE_OPTIONS: { value: UIEventType; label: string }[] = [
   { value: 'event', label: 'General Event' },
   { value: 'meeting', label: 'Meeting' },
@@ -35,11 +32,13 @@ export default function ScheduleView() {
   const userId = user?.id;
   const queryClient = useQueryClient();
 
-  const { data: events = [], isLoading } = useQuery({
+  // ✅ ADDED: error: fetchError 
+  // We extract the error from React Query so it doesn't silently hide failures!
+  const { data: events = [], isLoading, error: fetchError } = useQuery({
     queryKey: ['events', userId],
     queryFn: () => listEvents({ userId }),
-    enabled: !!userId,   // don't fetch (or mutate) until we actually know who's asking
-    staleTime: 30_000,   // avoid refetching on every focus/mount within 30s — fewer round trips
+    enabled: !!userId,   
+    staleTime: 30_000,   
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -47,80 +46,60 @@ export default function ScheduleView() {
   const [newEvent, setNewEvent] = useState<EventFormState>(EMPTY_FORM);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const saveEventMutation = useMutation({
-    mutationFn: async (eventData: EventFormState) => {
-      if (!userId) {
-        throw new Error('You must be signed in to save an event. Please refresh and try again.');
-      }
+ const saveEventMutation = useMutation({
+  mutationFn: async ({ eventData, id }: { eventData: EventFormState; id: string | null }) => {
+    if (!userId) {
+      throw new Error('You must be signed in to save an event. Please refresh and try again.');
+    }
 
-      const payload = {
+    const payload = {
+      title: eventData.title,
+      event_date: eventData.date,
+      event_time: eventData.time,
+      type: eventData.type,
+      status: eventData.status,
+    };
+
+    if (id) {
+      return await updateEvent(id, userId, payload);
+    }
+    return await createEvent({ ...payload, user_id: userId });
+  },
+  onMutate: async ({ eventData, id }) => {
+    await queryClient.cancelQueries({ queryKey: ['events', userId] });
+    const previousEvents = queryClient.getQueryData(['events', userId]);
+    queryClient.setQueryData(['events', userId], (old: any) => {
+      const optimisticEvent = {
+        id: id || `temp-${Date.now()}`,
         title: eventData.title,
         event_date: eventData.date,
         event_time: eventData.time,
         type: eventData.type,
         status: eventData.status,
+        user_id: userId
       };
-
-      if (editingId) {
-        return await updateEvent(editingId, userId, payload); 
+      if (id) {
+        return old?.map((e: any) => e.id === id ? optimisticEvent : e);
+      } else {
+        return [...(old || []), optimisticEvent];
       }
-      return await createEvent({ ...payload, user_id: userId });
-    },
-    
-    // 🔥 OPTIMISTIC UPDATE: This runs the millisecond you click "Save"
-    onMutate: async (eventData) => {
-      // 1. Cancel any outgoing background fetches so they don't overwrite our fast update
-      await queryClient.cancelQueries({ queryKey: ['events', userId] });
-
-      // 2. Snapshot the current calendar data just in case the database crashes
-      const previousEvents = queryClient.getQueryData(['events', userId]);
-
-      // 3. Force the calendar to instantly show the new event
-      queryClient.setQueryData(['events', userId], (old: any) => {
-        const optimisticEvent = {
-          id: editingId || `temp-${Date.now()}`, // Give it a temporary ID
-          title: eventData.title,
-          event_date: eventData.date,
-          event_time: eventData.time,
-          type: eventData.type,
-          status: eventData.status,
-          user_id: userId
-        };
-
-        if (editingId) {
-          // If editing, instantly replace the old event with the new typed data
-          return old?.map((e: any) => e.id === editingId ? optimisticEvent : e);
-        } else {
-          // If creating new, instantly push it to the calendar list
-          return [...(old || []), optimisticEvent];
-        }
-      });
-
-      // 4. Instantly close the modal and clear the form so the user doesn't wait!
-      setIsModalOpen(false);
-      setEditingId(null);
-      setNewEvent(EMPTY_FORM);
-
-      // Pass the snapshot to the onError function just in case
-      return { previousEvents };
-    },
-    
-    // 🛡️ THE SAFETY NET: If the database is too slow or crashes
-    onError: (error: any, _newTodo, context) => {
-      // 1. Roll back the calendar to the snapshot
-      if (context?.previousEvents) {
-        queryClient.setQueryData(['events', userId], context.previousEvents);
-      }
-      // 2. Re-open the modal and show them the error so they don't lose what they typed
-      setErrorMessage(error?.message || "The database was too slow. Event didn't save.");
-      setIsModalOpen(true);
-    },
-    
-    // 🔄 FINAL SYNC: Whether it succeeded or failed, quietly sync with the true database
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['events', userId] });
+    });
+    setIsModalOpen(false);
+    setEditingId(null);
+    setNewEvent(EMPTY_FORM);
+    return { previousEvents };
+  },
+  onError: (error: any, _newTodo, context) => {
+    if (context?.previousEvents) {
+      queryClient.setQueryData(['events', userId], context.previousEvents);
     }
-  });
+    setErrorMessage(error?.message || "The database was too slow. Event didn't save.");
+    setIsModalOpen(true);
+  },
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: ['events', userId] });
+  }
+});
 
   const deleteEventMutation = useMutation({
     mutationFn: (id: string) => {
@@ -148,24 +127,33 @@ export default function ScheduleView() {
     setIsModalOpen(true);
   };
 
-  const handleEditEvent = (eventToEdit: CalendarEventRow) => {
-    setEditingId(eventToEdit.id);
-    setNewEvent({
-      title: eventToEdit.title,
-      date: eventToEdit.event_date,
-      time: eventToEdit.event_time,
-      type: eventToEdit.type,
-      status: eventToEdit.status || 'Pending'
-    });
-    setErrorMessage(null);
-    setIsModalOpen(true);
-  };
+  function toUIEventType(value: string): UIEventType {
+  return (EVENT_TYPE_OPTIONS.some(opt => opt.value === value) ? value : 'event') as UIEventType;
+}
+
+   function toUIStatus(value: string): 'Pending' | 'Completed' {
+  return value === 'Completed' ? 'Completed' : 'Pending';
+}
+
+const handleEditEvent = (eventToEdit: CalendarEventRow) => {
+  setEditingId(eventToEdit.id);
+  setNewEvent({
+    title: eventToEdit.title,
+    date: eventToEdit.event_date,
+    time: eventToEdit.event_time,
+    type: toUIEventType(eventToEdit.type),
+    status: toUIStatus(eventToEdit.status)
+  });
+  setErrorMessage(null);
+  setIsModalOpen(true);
+};
+
 
   const handleSaveEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    saveEventMutation.mutate(newEvent);
-  };
+  e.preventDefault();
+  setErrorMessage(null);
+  saveEventMutation.mutate({ eventData: newEvent, id: editingId });
+};
 
   const handleDeleteFromCalendar = async (eventId: string): Promise<boolean> => {
     try {
@@ -176,16 +164,14 @@ export default function ScheduleView() {
     }
   };
 
-  // Memoized so these don't recompute on every render — only when events
-  // actually change (was previously recalculated on every render).
   const { upcomingEvents, upcomingDeadlines } = useMemo(() => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     const isUpcoming = (e: CalendarEventRow) => !!e?.event_date && new Date(e.event_date) >= startOfToday;
 
     return {
-      upcomingEvents: events.filter(e => e?.type === 'event').filter(isUpcoming),
-      upcomingDeadlines: events.filter(e => e?.type === 'deadline').filter(isUpcoming),
+      upcomingEvents: events.filter((e: any) => e?.type === 'event').filter(isUpcoming),
+      upcomingDeadlines: events.filter((e: any) => e?.type === 'deadline').filter(isUpcoming),
     };
   }, [events]);
 
@@ -218,8 +204,7 @@ export default function ScheduleView() {
         <button
           onClick={handleOpenNew}
           disabled={!userId}
-          className="bg-[#0f172a] hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-md text-xs font-medium transition-colors shadow-sm"
-        >
+         className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm"       >
           Add Event
         </button>
       </header>
@@ -228,6 +213,14 @@ export default function ScheduleView() {
         <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg">
           <AlertTriangle className="w-4 h-4 shrink-0" />
           Your session isn't fully loaded yet, so events can't be added or edited right now. Try refreshing the page.
+        </div>
+      )}
+
+      {/* ✅ ADDED: The UI Banner that instantly shows you if the database blocks the fetch! */}
+      {fetchError && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium rounded-lg">
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          Failed to load calendar events: {fetchError instanceof Error ? fetchError.message : String(fetchError)}
         </div>
       )}
 
@@ -255,7 +248,7 @@ export default function ScheduleView() {
             <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Events</h3>
             <ul className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
               {upcomingEvents.length === 0 && <p className="text-xs text-slate-400">No upcoming events.</p>}
-              {upcomingEvents.map(evt => {
+              {upcomingEvents.map((evt: any) => {
                 const startDate = evt?.event_date ? new Date(evt.event_date) : new Date();
                 return (
                 <li
@@ -286,7 +279,7 @@ export default function ScheduleView() {
             <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Deadlines</h3>
             <ul className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
               {upcomingDeadlines.length === 0 && <p className="text-xs text-slate-400">No deadlines.</p>}
-              {upcomingDeadlines.map(deadline => {
+              {upcomingDeadlines.map((deadline: any) => {
                  const startDate = deadline?.event_date ? new Date(deadline.event_date) : new Date();
                  return (
                 <li

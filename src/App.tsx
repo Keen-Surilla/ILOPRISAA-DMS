@@ -1,53 +1,78 @@
-import React, { useEffect } from 'react'; // Import useEffect
+import { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { SecureErrorBoundary } from './1-presentation-tier/components/SecureErrorBoundary';
-import { ProtectedRoute } from './1-presentation-tier/components/ProtectedRoute';
+import { SecureErrorBoundary } from './1-presentation-tier/components/core/SecureErrorBoundary';
+import { ProtectedRoute } from './1-presentation-tier/components/core/ProtectedRoute';
 import { useAuthStore } from './2-application-tier/stores/authStore';
+import { supabase } from './3-data-tier/config/SupabaseClient';
 
-// STANDARD IMPORTS (Safe and reliable)
-import LandingPage from './1-presentation-tier/pages/LandingPage';
-import LoginPage from './1-presentation-tier/pages/LoginPage';
-import SignUpPage from './1-presentation-tier/pages/SignUpPage';
-import CoachDashboard from './1-presentation-tier/pages/CoachDashboard';
-import AdminDashboard from './1-presentation-tier/pages/AdminDashboard';
-import CommitteeDashboard from './1-presentation-tier/pages/CommitteeDashboard';
 
+const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
+const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
+const SignUpPage = lazy(() => import('./1-presentation-tier/pages/SignUpPage'));
+const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
+const AthleteLogin = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteLogin'));
+const AthleteDashboard = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteDashboard'));
+const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
-  
-  if (role === 'coach') return <Navigate to="/coach/team" replace />;
+  if (role === 'coach') return <Navigate to="/coach/dashboard" replace />;
   if (role === 'admin') return <Navigate to="/admin" replace />;
   if (role === 'committee') return <Navigate to="/committee" replace />;
   if (role === 'athlete') return <Navigate to="/athlete/dashboard" replace />;
-  
   return <Navigate to="/login" replace />;
 };
 
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize);
-
-  // ADD THIS: Run the initialize function once when the app loads
-  useEffect(() => {
+  const signOut = useAuthStore((state) => state.signOut);
+useEffect(() => {
     initialize();
-  }, [initialize]);
+
+    const handleWindowFocus = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (!session || error) {
+        console.warn("Session expired while tab was asleep. Logging out.");
+        signOut(); 
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+
+  }, []);
 
   return (
-    <SecureErrorBoundary fallbackTitle="Application Error">
+    <SecureErrorBoundary fallbackTitle="Server Connection Error">
       <BrowserRouter>
-        <Routes>
-          {/* Routes remain the same */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignUpPage />} />
-          <Route path="/home" element={<RoleBasedRedirect />} />
-          
-          <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach']}><CoachDashboard /></ProtectedRoute>} />
-          <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/committee/*" element={<ProtectedRoute allowedRoles={['committee']}><CommitteeDashboard /></ProtectedRoute>} />
-          
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignUpPage />} />
+            <Route path="/home" element={<RoleBasedRedirect />} />
+            <Route path="/athlete-login" element={<AthleteLogin />} />
+            <Route path="/athlete/dashboard" element={<AthleteDashboard />} />
+            
+            {/* 
+              ADDED THIS: The Protected Route for the Athlete Dashboard
+              <Route
+                path="/athlete/*"
+                element={
+                  <ProtectedRoute allowedRoles={['athlete']}>
+                    <AthleteDashboard />
+                  </ProtectedRoute>
+                }
+              /> 
+            */} 
+            <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />
+            <Route path="/committee/*" element={<ProtectedRoute allowedRoles={['committee']}><CommitteeDashboard /></ProtectedRoute>} />   
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </SecureErrorBoundary>
   );

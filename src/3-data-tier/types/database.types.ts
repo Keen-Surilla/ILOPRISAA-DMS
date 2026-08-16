@@ -1,189 +1,399 @@
-/**
- * TIER 3 — DATA TIER: Database Type Definitions
- *
- * SECURITY RATIONALE:
- * - Strict TypeScript types eliminate an entire class of runtime errors that
- *   could arise from mismatched data shapes between tiers.
- * - Prevents OWASP A03 (Injection) at compile-time: if a field doesn't exist
- *   on the type, the compiler catches it before it reaches the DB layer.
- * - Prevents OWASP A04 (Insecure Design): impossible states are unrepresentable.
- *   e.g. a document status MUST be one of the enum values.
- */
+﻿export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-export type DocumentStatus = 'draft' | 'pending_review' | 'verified' | 'action_required';
-export type UserRole = 'athlete' | 'coach' | 'admin' | 'committee';
-export type EventKind = 'game_start' | 'document_deadline' | 'waiver_deadline' | 'form_deadline' | 'other';
-// Replaces the old generic set with the exact 9 required checklist slots
-// for an athlete's document requirements.
-export type DocumentType =
-  | 'transcript_sem1'
-  | 'transcript_sem2'
-  | 'birth_cert_original'
-  | 'birth_cert_xerox'
-  | 'medical_cert_1'
-  | 'medical_cert_2'
-  | 'parental_consent'
-  | 'id_picture_1'
-  | 'id_picture_2';
-
-// 'meeting' added so it's a real, persisted value instead of being
-// silently collapsed into 'event' at save time (see allow_meeting_type_migration.sql).
-export type EventType = 'event' | 'deadline' | 'meeting';
-export type EventStatus = 'Pending' | 'Completed';
-
-export interface Database {
+export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
-      profiles: {
+      coach_profiles: {
         Row: {
-          id: string;               // UUID — matches auth.users.id (FK)
-          role: UserRole;
-          full_name: string;
-          email: string;
-          institution_id: string | null;
-          avatar_url: string | null;
-          team_motto: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'updated_at'>;
-        Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
-        Relationships: [];
-      };
-      institutions: {
-        Row: {
-          id: string;
-          name: string;
-          region: string;
-          created_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['institutions']['Row'], 'id' | 'created_at'>;
-        Update: Partial<Database['public']['Tables']['institutions']['Insert']>;
-        Relationships: [];
-      };
-      coach_athlete_assignments: {
-        Row: {
-          id: string;
-          coach_id: string;
-          athlete_id: string;
-          institution_id: string;
-          assigned_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['coach_athlete_assignments']['Row'], 'id' | 'assigned_at'>;
-        Update: never; // Assignments are immutable; revoke then re-assign
-        Relationships: [];
-      };
+          created_at: string
+          id: string
+          prisaa_form_data: Json | null
+          profile_id: string
+          signature_storage_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          prisaa_form_data?: Json | null
+          profile_id: string
+          signature_storage_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          prisaa_form_data?: Json | null
+          profile_id?: string
+          signature_storage_path?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
-          id: string;
-          athlete_id: string;          // FK → profiles.id
-          document_type: DocumentType;
-          status: DocumentStatus;
-          storage_path: string;        // Supabase Storage object path
-          file_size_bytes: number;
-          mime_type: string;
-          original_filename: string;   // Sanitized at upload time
-          notes: string | null;        // User-provided — must be sanitized before render
-          reviewed_by: string | null;  // FK → profiles.id (coach/admin)
-          reviewed_at: string | null;
-          digital_signature: string | null; // SHA-256 hash of file content
-          metadata: Record<string, string> | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<
-          Database['public']['Tables']['documents']['Row'],
-          'id' | 'created_at' | 'updated_at' | 'reviewed_by' | 'reviewed_at'
-        >;
-        Update: Partial<Pick<
-          Database['public']['Tables']['documents']['Row'],
-          'status' | 'notes' | 'reviewed_by' | 'reviewed_at' | 'digital_signature' | 'metadata'
-        >>;
-        Relationships: [];
-      };
+          athlete_id: string
+          created_at: string
+          digital_signature: string | null
+          document_type: string
+          file_size_bytes: number
+          id: string
+          metadata: Json | null
+          mime_type: string
+          notes: string | null
+          original_filename: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          athlete_id: string
+          created_at?: string
+          digital_signature?: string | null
+          document_type: string
+          file_size_bytes: number
+          id?: string
+          metadata?: Json | null
+          mime_type: string
+          notes?: string | null
+          original_filename: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          athlete_id?: string
+          created_at?: string
+          digital_signature?: string | null
+          document_type?: string
+          file_size_bytes?: number
+          id?: string
+          metadata?: Json | null
+          mime_type?: string
+          notes?: string | null
+          original_filename?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
-          id: string;
-          title: string;
-          event_date: string;
-          event_time: string;
-          type: EventType;
-          status: EventStatus;
-          user_id: string;
-          created_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['events']['Row'], 'id' | 'created_at'>;
-        Update: Partial<Database['public']['Tables']['events']['Insert']>;
-        Relationships: [];
-      };
-      audit_logs: {
+          created_at: string
+          event_date: string
+          event_time: string
+          id: string
+          status: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_date: string
+          event_time: string
+          id?: string
+          status?: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_date?: string
+          event_time?: string
+          id?: string
+          status?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
         Row: {
-          id: string;
-          actor_id: string;       // Who performed the action
-          action: string;         // 'upload' | 'review' | 'verify' | 'reject' | 'login'
-          resource_type: string;  // 'document' | 'profile'
-          resource_id: string;
-          ip_address: string | null;
-          user_agent: string | null;
-          details: Record<string, unknown> | null;
-          created_at: string;
-        };
-        Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>;
-        Update: never; // Audit logs are write-once, append-only
-        Relationships: [];
-      };
-      // NOTE: this looks like a separate, informal roster table living
-      // alongside profiles/coach_athlete_assignments. Adding it here at
-      // least lets Supabase's client validate queries against it instead
-      // of everything being silently 'as any'.
+          avatar_url: string | null
+          created_at: string
+          dob: string | null
+          email: string
+          full_name: string
+          gender: string | null
+          id: string
+          institution_id: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          sport: string | null
+          team_motto: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          dob?: string | null
+          email: string
+          full_name: string
+          gender?: string | null
+          id: string
+          institution_id?: string | null
+          phone?: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          sport?: string | null
+          team_motto?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          dob?: string | null
+          email?: string
+          full_name?: string
+          gender?: string | null
+          id?: string
+          institution_id?: string | null
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          sport?: string | null
+          team_motto?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rate_limit_events: {
+        Row: {
+          action: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
-          id: string;
-          name: string;
-          email: string;
-          role: string;
-          coach_id: string;
-        };
-        Insert: Omit<Database['public']['Tables']['team_members']['Row'], 'id'>;
-        Update: Partial<Database['public']['Tables']['team_members']['Insert']>;
-        Relationships: [];
-      };
-    };
+          coach_id: string
+          created_at: string
+          date_of_birth: string | null
+          division: string | null
+          email: string
+          id: string
+          name: string
+          prisaa_academic_data: Json | null
+          role: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string
+          date_of_birth?: string | null
+          division?: string | null
+          email: string
+          id?: string
+          name: string
+          prisaa_academic_data?: Json | null
+          role?: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string
+          date_of_birth?: string | null
+          division?: string | null
+          email?: string
+          id?: string
+          name?: string
+          prisaa_academic_data?: Json | null
+          role?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+    }
     Views: {
-      athlete_document_summary: {
-        Row: {
-          athlete_id: string;
-          full_name: string;
-          institution_id: string | null;
-          total_documents: number;
-          verified_count: number;
-          pending_count: number;
-          action_required_count: number;
-        };
-        Relationships: [];
-      };
-    };
+      [_ in never]: never
+    }
     Functions: {
-      get_my_role: {
-        Args: Record<string, never>;
-        Returns: UserRole;
-        Relationships: [];
-      };
-    };
+      calculate_prisaa_age: {
+        Args: { dob: string; event_year: number }
+        Returns: number
+      }
+      cleanup_expired_events: { Args: never; Returns: undefined }
+      get_my_role: { Args: never; Returns: string }
+      link_athlete_account: { Args: never; Returns: undefined }
+      run_daily_archival: { Args: never; Returns: undefined }
+    }
     Enums: {
-      document_status: DocumentStatus;
-      user_role: UserRole;
-      document_type: DocumentType;
-      event_kind: EventKind;
-    };
-  };
+      user_role: "athlete" | "coach" | "admin" | "committee"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
 
-// Convenience row-type aliases
-export type Profile = Database['public']['Tables']['profiles']['Row'];
-export type Document = Database['public']['Tables']['documents']['Row'];
-export type Institution = Database['public']['Tables']['institutions']['Row'];
-export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
-export type CoachAthleteAssignment = Database['public']['Tables']['coach_athlete_assignments']['Row'];
-export type CalendarEvent = Database['public']['Tables']['events']['Row'];
-export type CalendarEventInsert = Database['public']['Tables']['events']['Insert'];
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      user_role: ["athlete", "coach", "admin", "committee"],
+    },
+  },
+} as const

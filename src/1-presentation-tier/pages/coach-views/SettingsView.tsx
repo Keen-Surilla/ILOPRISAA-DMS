@@ -1,23 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { User, Shield, Info, Save, Search, X, ChevronDown, Users } from 'lucide-react';
+import { User, Shield, Info, Search, X, ChevronDown, Users, DivideCircleIcon } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile } from '../../../3-data-tier/services/profileService';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
+import { PhilippinePhoneInput } from '../../components/ui/PhilippinePhoneInput';
+import { SexOption } from '../../components/ui/SexOption';
+import { ILOPRISAA_SCHOOLS } from '../../../3-data-tier/constant/schools';
+import { ILOPRISAA_SPORTS } from '../../../3-data-tier/constant/sports';
+import { SchoolList } from '../../components/ui/SchoolList';
 
-// Put this near your imports at the top of the file
-const ILOPRISAA_SCHOOLS = [
-  { id: 'CPU', name: 'Central Philippine University' },
-  { id: 'USA', name: 'University of San Agustin' },
-  { id: 'JBLFMU', name: 'John B. Lacson Foundation Maritime University' },
-  { id: 'WIT', name: 'Western Institute of Technology' },
-  { id: 'IDC', name: 'Iloilo Doctors College' },
-  { id: 'SPUI', name: 'St. Paul University Iloilo' },
-  { id: 'UI', name: 'PHINMA University of Iloilo' },
-  { id: 'HSCI', name: 'Hua Siong College of Iloilo' },
-  { id: 'CSCJ', name: 'Colegio del Sagrado Corazon de Jesus' },
-  { id: 'SJI', name: 'Sun Yat Sen High School' },
-];
+
+
 
 export function useRealtimeSync() {
   const queryClient = useQueryClient();
@@ -47,18 +41,11 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('account');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  
-// Put this inside your component, near your other state variables
   const [institution, setInstitution] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-
-  // This magic line instantly filters the schools as the coach types!
-// This version safely handles null/undefined values so it never crashes!
   const filteredSchools = ILOPRISAA_SCHOOLS.filter(school => {
-    // 1. Create a safe search string (if it's null, default to an empty string '')
     const searchStr = (institution || '').toLowerCase();
     
-    // 2. Safely perform the search
     return (
       school.name.toLowerCase().includes(searchStr) ||
       school.id.toLowerCase().includes(searchStr)
@@ -82,7 +69,7 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     team_motto: '' // <--- Added custom team text field
   });
 
-  useEffect(() => {
+useEffect(() => {
     if (profile) {
       setFormData({
         full_name: profile.full_name || '',
@@ -91,8 +78,13 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
         gender: profile.gender || '',
         sport: profile.sport || '',
         institution_id: profile.institution_id || '',
-        team_motto: profile.team_motto || '' // <--- Populate it
+        team_motto: profile.team_motto || '' 
       });
+
+      if (profile.institution_id) {
+        const matchedSchool = ILOPRISAA_SCHOOLS.find(s => s.id === profile.institution_id);
+        setInstitution(matchedSchool ? matchedSchool.name : profile.institution_id);
+      }
     }
   }, [profile]);
 
@@ -103,9 +95,10 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
       setSuccessMessage('Settings updated successfully!');
       setTimeout(() => setSuccessMessage(null), 3000);
     },
-    onError: () => {
-      alert("Failed to update profile. Please try again.");
-    }
+  onError: (error: any) => {
+  console.error('Profile update failed:', error);
+  alert(`Failed to update profile: ${error?.message || 'Unknown error'}`);
+}
   });
 
   const handleSaveProfile = (e: React.FormEvent) => {
@@ -122,7 +115,6 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
-  // Utility to format raw sport data (e.g., "basketball_5x5") into a clean Title (e.g., "Basketball 5x5 Team")
   const formatSportTeamName = (rawSport: string) => {
     if (!rawSport) return 'No Sport Selected';
     const cleanSport = rawSport.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -207,9 +199,11 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                         <input type="text" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} className="w-full md:w-2/3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors" />
                       </div>
 
-                      <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
-                        <label className="text-sm font-medium text-slate-700 md:w-1/3">Phone Number</label>
-                        <input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+63 9XX XXX XXXX" className="w-full md:w-2/3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors" />
+                    <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
+                        <label className="text-sm font-medium text-slate-700 md:w-1/3">Tel. No.</label>
+                        <div className="w-full md:w-2/3">
+                          <PhilippinePhoneInput value={formData.phone} onChange={(v) => setFormData({ ...formData, phone: v })} />
+                        </div>
                       </div>
 
                       <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
@@ -217,19 +211,17 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                         <input type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="w-full md:w-2/3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors" />
                       </div>
 
-                      <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
-                        <label className="text-sm font-medium text-slate-700 md:w-1/3">Gender</label>
-                        <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full md:w-2/3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors">
-                          <option value="">Select Gender</option>
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                        </select>
+                   <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
+                        <label className="text-sm font-medium text-slate-700 md:w-1/3">Sex</label>
+                        <div className="w-full md:w-2/3">
+                          <SexOption value={formData.gender} onChange={(v) => setFormData({ ...formData, gender: v })} options={['Male', 'Female']} />
+                        </div>
                       </div>
 
                       <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
                         <label className="text-sm font-medium text-slate-700 md:w-1/3">Primary Sport</label>
                         <div className="relative w-full md:w-2/3">
-                          <select 
+                        <select 
                             required 
                             value={formData.sport} 
                             onChange={(e) => setFormData({...formData, sport: e.target.value})} 
@@ -237,33 +229,18 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                           >
                             <option value="" disabled>Select your sport</option>
                             <optgroup label="Team Sports">
-                              <option value="baseball">Baseball</option>
-                              <option value="basketball_5x5">Basketball (5x5)</option>
-                              <option value="basketball_3x3">Basketball (3x3)</option>
-                              <option value="beach_volleyball">Beach Volleyball</option>
-                              <option value="football">Football</option>
-                              <option value="sepaktakraw">Sepaktakraw</option>
-                              <option value="softball">Softball</option>
-                              <option value="volleyball">Volleyball</option>
+                              {ILOPRISAA_SPORTS.filter((s) => s.category === 'team').map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
                             </optgroup>
                             <optgroup label="Individual Sports">
-                              <option value="archery">Archery</option>
-                              <option value="athletics">Athletics</option>
-                              <option value="badminton">Badminton</option>
-                              <option value="billiards">Billiards</option>
-                              <option value="boxing">Boxing</option>
-                              <option value="chess">Chess</option>
-                              <option value="dancesport">Dancesport</option>
-                              <option value="gymnastics">Gymnastics</option>
-                              <option value="karatedo">Karatedo</option>
-                              <option value="swimming">Swimming</option>
-                              <option value="table_tennis">Table Tennis</option>
-                              <option value="taekwondo">Taekwondo</option>
-                              <option value="tennis">Tennis</option>
-                              <option value="weightlifting">Weightlifting</option>
+                              {ILOPRISAA_SPORTS.filter((s) => s.category === 'individual').map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
                             </optgroup>
                           </select>
                           <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                          
                         </div>
                       </div>
                     </div>
@@ -277,48 +254,20 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                     
                     <div className="space-y-1">
                       {/* --- ILOPRISAA AUTOCOMPLETE INPUT --- */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4 relative">
-  <label className="text-sm font-medium text-slate-700 md:w-1/3">Institution Name</label>
-  
-  <div className="w-full md:w-2/3 relative">
-    <input
-      type="text"
-      value={institution}
-      onChange={e => {
-        setInstitution(e.target.value);
-        setShowSuggestions(true);
-      }}
-      onFocus={() => setShowSuggestions(true)}
-      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
-      placeholder="e.g. Western Institute of Technology"
-    />
-
-    {/* The ILOPRISAA Suggestion Dropdown */}
-    {showSuggestions && institution && (
-      <ul className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-        {filteredSchools.length > 0 ? (
-          filteredSchools.map((school) => (
-            <li
-              key={school.id}
-              onClick={() => {
-                setInstitution(school.name);
-                setShowSuggestions(false);
-              }}
-              className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer flex items-center justify-between text-sm text-slate-700 border-b border-slate-50 last:border-0"
-            >
-              <span className="font-medium">{school.name}</span>
-            </li>
-          ))
-        ) : (
-          <li className="px-4 py-3 text-xs text-slate-400 italic text-center">
-            No ILOPRISAA schools found matching "{institution}"
-          </li>
-        )}
-      </ul>
-    )}
-  </div>
-</div>
+                     <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
+                        <label className="text-sm font-medium text-slate-700 md:w-1/3">Institution</label>
+                        <div className="w-full md:w-2/3">
+                          <SchoolList
+                        value={institution}
+                        onChange={(name, id) => {
+                          setInstitution(name);
+                          setFormData({ ...formData, institution_id: id });
+                        }}
+                        placeholder="e.g. Western Institute of Technology"
+                        inputClassName="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
+                      />
+                        </div>
+                      </div>
 
                       <div className="flex flex-col md:flex-row md:items-center justify-between py-5 border-b border-slate-100 gap-4">
                         <div className="md:w-1/3">
@@ -365,15 +314,14 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                 )}
               </div>
 
-              {/* FLOATING SAVE BUTTON (Always visible for Account & Team tabs) */}
+              {/* save button */}
               {(activeTab === 'account' || activeTab === 'team') && (
                 <div className="sticky bottom-0 bg-white p-6 border-t border-slate-100 flex justify-end shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.05)]">
                   <button 
                     type="submit" 
                     disabled={updateMutation.isPending} 
-                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-[#0f172a] hover:bg-slate-800 disabled:bg-slate-400 rounded-lg shadow-sm transition-colors"
+                    className="flex items-center px-5 py-3 text-sm font-medium text-white bg-[#0f172a] hover:bg-slate-800 disabled:bg-slate-400 rounded-lg shadow-sm transition-colors"
                   >
-                    <Save className="w-4 h-4" />
                     {updateMutation.isPending ? 'Saving...' : 'Save changes'}
                   </button>
                 </div>
@@ -384,4 +332,4 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
-}
+}      

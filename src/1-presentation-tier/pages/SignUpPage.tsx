@@ -2,6 +2,12 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { Eye, EyeOff, ChevronDown } from 'lucide-react';
+import { PhilippinePhoneInput } from '../../1-presentation-tier/components/ui/PhilippinePhoneInput';
+import { SexOption } from '../components/ui/SexOption';
+import { ILOPRISAA_SCHOOLS } from '../../3-data-tier/constant/schools';
+import { SportSelect } from '../components/ui/SportSelect';
+import { SchoolList } from '../components/ui/SchoolList';
+
 
 import Logo1 from '../../assets/Logo1.svg';
 import Logo2 from '../../assets/Logo2.svg';
@@ -83,21 +89,7 @@ export default function SignUpPage() {
     <div className="min-h-screen bg-white flex flex-col font-sans">
       <header className="w-full px-8 py-4 flex justify-between items-center border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <img 
-            src={Logo2} 
-            alt="ILOPRISAA Logo" 
-            className="w-auto h-7 object-contain flex-none" 
-          />
-        </div>
-        
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-slate-600">Already have an account?</span>
-          <Link 
-            to="/login" 
-            className="border border-blue-600 text-blue-600 px-5 py-1.5 rounded-lg font-medium hover:bg-blue-50 transition-colors"
-          >
-            Sign In
-          </Link>
+            <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
         </div>
       </header>
 
@@ -125,85 +117,41 @@ export default function SignUpPage() {
               <h3 className="text-xs font-bold text-blue-600 mb-3">Personal Information</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Full Name</label>
                   <input type="text" required maxLength={100} value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400" placeholder="Enter full name" />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                  <input type="email" required maxLength={100} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400" placeholder="Enter email address" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
-                  <input type="tel" required maxLength={15} value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400" placeholder="Enter phone number" />
+                  <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Tel. No.</label>
+                  <PhilippinePhoneInput value={phone} onChange={setPhone} required />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Date of Birth</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Date of Birth</label>
                     <input type="date" required value={dob} onChange={(e) => setDob(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Gender</label>
-                    <div className="relative">
-                      <select required value={gender} onChange={(e) => setGender(e.target.value)} className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 appearance-none">
-                        <option value="" disabled>Select your gender</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Sex</label>
+                      <SexOption value={gender} onChange={setGender} options={['Male', 'Female']} />
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">School</label>
                     <div className="relative">
-                      <select required value={school} onChange={(e) => setSchool(e.target.value)} className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 appearance-none">
-                        <option value="" disabled>Select your school</option>
-                        <option value="wit">Western Institute of Technology</option>
-                        <option value="cpu">Central Philippine University</option>
-                        <option value="san_agustin">University of San Agustin</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">School</label>
+                        <SchoolList value={school} onChange={setSchool} required />
+                      </div>
+                    
                     </div>
-                  </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Primary Sport</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Primary Sport</label>
                     <div className="relative">
-                      <select required value={sport} onChange={(e) => setSport(e.target.value)} className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 appearance-none">
-                        <option value="" disabled>Select your sport</option>
-                        <optgroup label="Team Sports">
-                          <option value="baseball">Baseball</option>
-                          <option value="basketball_5x5">Basketball (5x5)</option>
-                          <option value="basketball_3x3">Basketball (3x3)</option>
-                          <option value="beach_volleyball">Beach Volleyball</option>
-                          <option value="football">Football</option>
-                          <option value="sepaktakraw">Sepaktakraw</option>
-                          <option value="softball">Softball</option>
-                          <option value="volleyball">Volleyball</option>
-                        </optgroup>
-                        <optgroup label="Individual Sports">
-                          <option value="archery">Archery</option>
-                          <option value="athletics">Athletics</option>
-                          <option value="badminton">Badminton</option>
-                          <option value="billiards">Billiards</option>
-                          <option value="boxing">Boxing</option>
-                          <option value="chess">Chess</option>
-                          <option value="dancesport">Dancesport</option>
-                          <option value="gymnastics">Gymnastics</option>
-                          <option value="karatedo">Karatedo</option>
-                          <option value="swimming">Swimming</option>
-                          <option value="table_tennis">Table Tennis</option>
-                          <option value="taekwondo">Taekwondo</option>
-                          <option value="tennis">Tennis</option>
-                          <option value="weightlifting">Weightlifting</option>
-                        </optgroup>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                     <SportSelect value={sport} onChange={setSport} required />
                     </div>
                   </div>
                 </div>
@@ -213,9 +161,14 @@ export default function SignUpPage() {
 
             <div className="pt-2">
               <h3 className="text-xs font-bold text-blue-600 mb-3">Account Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Email Address</label>
+                  <input type="email" required maxLength={100} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400" placeholder="Example@gmail.com" />
+                </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Password</label>
                   <div className="relative">
                     <input type={showPassword ? "text" : "password"} required maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden" placeholder="Enter password" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors">
@@ -225,7 +178,7 @@ export default function SignUpPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Confirm Password</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Confirm Password</label>
                   <div className="relative">
                     <input type={showConfirmPassword ? "text" : "password"} required maxLength={128} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden" placeholder="Confirm password" />
                     <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors">
