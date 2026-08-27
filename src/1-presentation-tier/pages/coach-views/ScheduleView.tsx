@@ -26,14 +26,23 @@ const EVENT_TYPE_OPTIONS: { value: UIEventType; label: string }[] = [
 const ACTIVE_PILL_STYLE = "bg-blue-50 text-blue-700 border-blue-600 shadow-sm ring-1 ring-blue-600";
 const INACTIVE_PILL_STYLE = "bg-white text-slate-500 border-slate-200 hover:bg-slate-50";
 
+const SIDEBAR_LIST_LIMIT = 5;
+
+
+function parseLocalDate(dateStr?: string | null): Date {
+  if (!dateStr) return new Date();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  if (!year || !month || !day) return new Date(dateStr);
+  return new Date(year, month - 1, day);
+}
+
 export default function ScheduleView() {
   const authStore = useAuthStore();
   const user = authStore?.user;
   const userId = user?.id;
   const queryClient = useQueryClient();
 
-  // ✅ ADDED: error: fetchError 
-  // We extract the error from React Query so it doesn't silently hide failures!
+
   const { data: events = [], isLoading, error: fetchError } = useQuery({
     queryKey: ['events', userId],
     queryFn: () => listEvents({ userId }),
@@ -45,6 +54,8 @@ export default function ScheduleView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newEvent, setNewEvent] = useState<EventFormState>(EMPTY_FORM);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [resolveDeleteConfirm, setResolveDeleteConfirm] = useState<((confirmed: boolean) => void) | null>(null);
 
  const saveEventMutation = useMutation({
   mutationFn: async ({ eventData, id }: { eventData: EventFormState; id: string | null }) => {
@@ -69,8 +80,7 @@ export default function ScheduleView() {
     await queryClient.cancelQueries({ queryKey: ['events', userId] });
     const previousEvents = queryClient.getQueryData(['events', userId]);
     queryClient.setQueryData(['events', userId], (old: any) => {
-      const optimisticEvent = {
-        id: id || `temp-${Date.now()}`,
+      const patch = {
         title: eventData.title,
         event_date: eventData.date,
         event_time: eventData.time,
@@ -79,9 +89,12 @@ export default function ScheduleView() {
         user_id: userId
       };
       if (id) {
-        return old?.map((e: any) => e.id === id ? optimisticEvent : e);
+        // Merge onto the existing cached row so fields not present in the
+        // form (timestamps, links, etc.) survive the optimistic update
+        // instead of being wiped until the refetch lands.
+        return old?.map((e: any) => e.id === id ? { ...e, ...patch } : e);
       } else {
-        return [...(old || []), optimisticEvent];
+        return [...(old || []), { id: `temp-${Date.now()}`, ...patch }];
       }
     });
     setIsModalOpen(false);
@@ -156,6 +169,15 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
 };
 
   const handleDeleteFromCalendar = async (eventId: string): Promise<boolean> => {
+    setPendingDeleteId(eventId);
+    const confirmed = await new Promise<boolean>((resolve) => {
+      setResolveDeleteConfirm(() => resolve);
+    });
+    setPendingDeleteId(null);
+    setResolveDeleteConfirm(null);
+
+    if (!confirmed) return false;
+
     try {
       await deleteEventMutation.mutateAsync(eventId);
       return true;
@@ -164,16 +186,28 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
     }
   };
 
+  const eventPendingDelete = pendingDeleteId
+    ? events.find((e: any) => e.id === pendingDeleteId)
+    : null;
+
+  const [showAllEvents, setShowAllEvents] = useState(false);
+  const [showAllDeadlines, setShowAllDeadlines] = useState(false);
+
   const { upcomingEvents, upcomingDeadlines } = useMemo(() => {
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
-    const isUpcoming = (e: CalendarEventRow) => !!e?.event_date && new Date(e.event_date) >= startOfToday;
+    const isUpcoming = (e: CalendarEventRow) => !!e?.event_date && parseLocalDate(e.event_date) >= startOfToday;
+    const byDateAsc = (a: CalendarEventRow, b: CalendarEventRow) =>
+      parseLocalDate(a?.event_date).getTime() - parseLocalDate(b?.event_date).getTime();
 
     return {
-      upcomingEvents: events.filter((e: any) => e?.type === 'event').filter(isUpcoming),
-      upcomingDeadlines: events.filter((e: any) => e?.type === 'deadline').filter(isUpcoming),
+      upcomingEvents: events.filter((e: any) => e?.type === 'event').filter(isUpcoming).sort(byDateAsc),
+      upcomingDeadlines: events.filter((e: any) => e?.type === 'deadline').filter(isUpcoming).sort(byDateAsc),
     };
   }, [events]);
+
+  const visibleEvents = showAllEvents ? upcomingEvents : upcomingEvents.slice(0, SIDEBAR_LIST_LIMIT);
+  const visibleDeadlines = showAllDeadlines ? upcomingDeadlines : upcomingDeadlines.slice(0, SIDEBAR_LIST_LIMIT);
 
   if (isLoading) {
     return (
@@ -248,8 +282,8 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
             <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Events</h3>
             <ul className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
               {upcomingEvents.length === 0 && <p className="text-xs text-slate-400">No upcoming events.</p>}
-              {upcomingEvents.map((evt: any) => {
-                const startDate = evt?.event_date ? new Date(evt.event_date) : new Date();
+              {visibleEvents.map((evt: any) => {
+                const startDate = parseLocalDate(evt?.event_date);
                 return (
                 <li
                   key={evt.id}
@@ -273,14 +307,23 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
                 </li>
               )})}
             </ul>
+            {upcomingEvents.length > SIDEBAR_LIST_LIMIT && (
+              <button
+                type="button"
+                onClick={() => setShowAllEvents(v => !v)}
+                className="mt-3 text-xs font-bold text-blue-600 hover:text-blue-700"
+              >
+                {showAllEvents ? 'Show less' : `See all (${upcomingEvents.length})`}
+              </button>
+            )}
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Deadlines</h3>
             <ul className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
               {upcomingDeadlines.length === 0 && <p className="text-xs text-slate-400">No deadlines.</p>}
-              {upcomingDeadlines.map((deadline: any) => {
-                 const startDate = deadline?.event_date ? new Date(deadline.event_date) : new Date();
+              {visibleDeadlines.map((deadline: any) => {
+                 const startDate = parseLocalDate(deadline?.event_date);
                  return (
                 <li
                   key={deadline.id}
@@ -297,6 +340,15 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
                 </li>
               )})}
             </ul>
+            {upcomingDeadlines.length > SIDEBAR_LIST_LIMIT && (
+              <button
+                type="button"
+                onClick={() => setShowAllDeadlines(v => !v)}
+                className="mt-3 text-xs font-bold text-blue-600 hover:text-blue-700"
+              >
+                {showAllDeadlines ? 'Show less' : `See all (${upcomingDeadlines.length})`}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -366,6 +418,41 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteId && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-6 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <h3 className="font-bold text-slate-800 text-sm">Delete this event?</h3>
+              </div>
+              <p className="text-xs text-slate-500">
+                {eventPendingDelete?.title ? `"${eventPendingDelete.title}"` : 'This event'} will be permanently removed. This can't be undone.
+              </p>
+            </div>
+            <div className="px-6 pb-6 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => resolveDeleteConfirm?.(false)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => resolveDeleteConfirm?.(true)}
+                disabled={deleteEventMutation.isPending}
+                className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg shadow-md shadow-red-600/20"
+              >
+                {deleteEventMutation.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

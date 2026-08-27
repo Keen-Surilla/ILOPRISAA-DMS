@@ -23,8 +23,15 @@ export default function AthleteGuesztLogin() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   useEffect(() => {
     // 1. Grab the token from the URL
@@ -82,6 +89,7 @@ export default function AthleteGuesztLogin() {
         setErrorMsg(error);
       } else {
         setStep('otp');
+        setResendCooldown(30);
       }
     } catch (err: any) {
       console.error('Sending OTP failed:', err);
@@ -127,9 +135,16 @@ export default function AthleteGuesztLogin() {
         setPinShake(true);
         setTimeout(() => setPinShake(false), 500);
       } else {
+        // This was the actual missing piece — verifyAthleteOtp was
+        // succeeding (role/profile correctly set in the store), but
+        // nothing ever told the router to leave this page. RoleBasedRedirect
+        // at /home sends 'athlete' role to the right portal from here.
         navigate('/home', { replace: true });
       }
     } catch (err: any) {
+      // If verifyAthleteOtp throws instead of returning {error}, the spinner
+      // used to hang forever here — this is what was causing "stuck in
+      // verifying" whenever the request failed in an unexpected way.
       console.error('OTP verification failed:', err);
       setErrorMsg(err?.message || 'Verification failed. Please try again.');
       setPinShake(true);
@@ -187,7 +202,7 @@ export default function AthleteGuesztLogin() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
-                className="w-full px-5 py-3.5 bg-slate-100 border border-transparent rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white outline-none transition-[border-color,background-color]"
+                className="w-full px-5 py-3.5 bg-slate-100 border border-transparent rounded-full text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white outline-none transition-[border-color,background-color]"
               />
             </div>
             <button
@@ -206,7 +221,7 @@ export default function AthleteGuesztLogin() {
               </label>
 
               <div
-                className={`flex justify-between gap-1 sm:gap-2 ${pinShake ? 'animate-shake' : ''}`}
+                className="flex justify-between gap-1 sm:gap-2"
                 role="group"
                 aria-labelledby="otp-label"
               >
@@ -223,9 +238,10 @@ export default function AthleteGuesztLogin() {
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     aria-label={`Digit ${index + 1} of 6`}
                     aria-invalid={pinShake}
+                    style={pinShake ? { animationDelay: `${index * 25}ms` } : undefined}
                     className={`w-10 h-12 sm:w-11 sm:h-12 text-center text-lg font-bold rounded-2xl outline-none transition-[border-color,background-color,box-shadow] ${
                       pinShake
-                        ? 'bg-red-50 border-2 border-red-400 ring-2 ring-red-200'
+                        ? 'bg-red-50 border-2 border-red-400 ring-2 ring-red-200 animate-shake'
                         : 'bg-slate-100 border border-transparent focus:border-blue-600 focus:bg-white focus:ring-2 focus:ring-blue-600/20'
                     }`}
                   />
@@ -239,10 +255,10 @@ export default function AthleteGuesztLogin() {
                 <button
                   type="button"
                   onClick={handleSendPin}
-                  disabled={isSending}
+                  disabled={isSending || resendCooldown > 0}
                   className="text-xs text-slate-500 hover:text-slate-800 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSending ? 'Sending…' : 'Resend code'}
+                  {isSending ? 'Sending…' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
                 </button>
               </div>
             </div>

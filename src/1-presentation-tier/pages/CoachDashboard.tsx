@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, Suspense, lazy } from 'react';
-import { Calendar, Users, LayoutDashboard, Settings, Clock, ClipboardCheck, Bell, CheckCircle2, UserCircle, AlertCircle, ArrowRight, Search, Download, FileText, CheckSquare, Archive } from 'lucide-react';
+import { Calendar, Users, LayoutDashboard, Settings, Clock, ClipboardCheck, Bell, CheckCircle2, UserCircle, AlertCircle, ArrowRight, FileText, CheckSquare, Archive } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { teamApi } from '../../3-data-tier/api/teamApi';
@@ -387,10 +387,10 @@ export default function CoachDashboard() {
                         ]}
                       >
               
-        <div className="p-8 max-w-7xl mx-auto font-sans text-slate-900 relative">
-          
-          {/* Shared Top Header (Search Bar & Profile Avatar) */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+        <div className="font-sans text-slate-900 relative">
+
+          {/* Shared Top Header (Search Bar & Profile Avatar) — sticky on scroll, spans the full width of the portal */}
+          <div className="sticky top-0 z-20 w-full h-[76px] px-8 mb-10 bg-white/90 backdrop-blur-sm border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="relative w-full max-w-md">
             </div>
             <div className="flex items-center gap-6">
@@ -409,10 +409,12 @@ export default function CoachDashboard() {
             </div>
           </div>
 
-          {/* Inject the selected tab content */}
-          <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400 font-medium animate-pulse">Loading...</div>}>
-            {renderActiveView()}
-          </Suspense>
+          <div className="max-w-7xl mx-auto px-8 pb-8">
+            {/* Inject the selected tab content */}
+            <Suspense fallback={<div className="flex items-center justify-center h-64 text-slate-400 font-medium animate-pulse">Loading...</div>}>
+              {renderActiveView()}
+            </Suspense>
+          </div>
 
         </div>
       </PortalShell>

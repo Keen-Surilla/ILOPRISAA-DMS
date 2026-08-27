@@ -13,7 +13,6 @@ import { Link as LinkIcon, Check } from 'lucide-react';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
 import { DivisionSelect } from '../../components/ui/DivisionSelect';
 
-// --- 1. ILOPRISAA ABBREVIATION DICTIONARY ---
 const ILOPRISAA_SCHOOLS: Record<string, string> = {
   'western institute of technology': 'WIT',
   'central philippine university': 'CPU',
@@ -40,7 +39,6 @@ export function getSchoolAbbreviation(schoolName?: string | null): string {
     return ILOPRISAA_SCHOOLS[normalized];
   }
   
-  // Auto-generate an acronym for unknown schools (e.g. "University of Iloilo" -> "UI")
   return schoolName
     .split(/[\s-]+/)
     .map(word => word[0])
@@ -63,7 +61,6 @@ function getPrisaaAge(dob: string | null | undefined, eventYear: number): number
 }
 
 export function useTeamDashboardData(currentUserId: string) {
-  // 1. Fetch Athletes
 const { data: athletes = [], isLoading: isLoadingAthletes } = useQuery({
   queryKey: ['teamMembers', currentUserId],
   queryFn: () => teamApi.getTeamMembers(currentUserId),
@@ -84,8 +81,6 @@ useEffect(() => {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'team_members' },
       () => {
-        // Any insert/update/delete on team_members — refetch the roster
-        // and archives so both stay live without a manual browser refresh.
         queryClient.invalidateQueries({ queryKey: ['teamMembers', currentUserId] });
         queryClient.invalidateQueries({ queryKey: ['archivedTeamMembers', currentUserId] });
       }
@@ -99,15 +94,14 @@ useEffect(() => {
 
 
 
-  // 2. Fetch Events (FIXED: Now perfectly synchronized with the Schedule tab!)
+
   const { data: allEvents = [], isLoading: isLoadingEvents } = useQuery({
-    queryKey: ['events', currentUserId],                  // <--- Shares the Schedule tab's cache key
-    queryFn: () => listEvents({ userId: currentUserId }), // <--- Passes the specific coach's ID
+    queryKey: ['events', currentUserId],                  
+    queryFn: () => listEvents({ userId: currentUserId }), 
     enabled: !!currentUserId,
     staleTime: 30_000, 
   });
 
-  // 3. Filter to ALL upcoming events (excluding meetings & deadlines)
   const upcomingEvents = useMemo(() => {
     if (!Array.isArray(allEvents)) return [];
     
@@ -116,21 +110,15 @@ useEffect(() => {
     
     return allEvents
       .filter(ev => {
-        // Bulletproof check to prevent crashes
         if (!ev || !ev.event_date) return false;
-        
-        // ONLY include 'event' types
         const isActualEvent = ev.type === 'event';
         const eventDate = new Date(ev.event_date);
         
-        // Keep ALL events from today onwards
         return isActualEvent && eventDate >= today;
       })
-      // Sort them so the closest upcoming event is at the top of the list
       .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
   }, [allEvents]);
 
-  // 4. Fetch Coach Profile
   const { data: profile, isLoading: isLoadingProfile } = useQuery({
     queryKey: ['coachProfile', currentUserId], 
     queryFn: () => getProfile(currentUserId),
@@ -151,12 +139,11 @@ export default function TeamView() {
   const { user } = useAuthStore();
   const currentUserId = user?.id || '';
 
-  // 1. Get the queryClient to control the cache
   const queryClient = useQueryClient();
 
-const { athletes, eventCount, upcomingEvents, profile, isLoading } = useTeamDashboardData(currentUserId);
+  const { athletes, eventCount, upcomingEvents, profile, isLoading } = useTeamDashboardData(currentUserId);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newAthlete, setNewAthlete] = useState({ name: '', email: '', division: '' });
+  const [newAthlete, setNewAthlete] = useState({ name: '', email: '', division: '', date_of_birth: '' });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [athleteToDelete, setAthleteToDelete] = useState<string | null>(null);
   const [docsAthlete, setDocsAthlete] = useState<{ id: string; name: string } | null>(null);
@@ -250,7 +237,7 @@ const filteredAthletes = useMemo(() => {
       // Magically refreshes the athlete list in the background!
       queryClient.invalidateQueries({ queryKey: ['teamMembers', currentUserId] });
       setIsModalOpen(false);
-      setNewAthlete({ name: '', email: '', division: '' });
+      setNewAthlete({ name: '', email: '', division: '', date_of_birth: '' });
     },
     onError: (error: any) => {
       setErrorMessage(error?.message || "Failed to add athlete.");
@@ -292,6 +279,20 @@ const filteredAthletes = useMemo(() => {
   return;
 }
 
+    if (!newAthlete.date_of_birth) {
+      setErrorMessage("Please enter the athlete's date of birth.");
+      return;
+    }
+
+    const dobDate = new Date(newAthlete.date_of_birth);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (Number.isNaN(dobDate.getTime()) || dobDate > today) {
+      setErrorMessage("Please enter a valid date of birth (it can't be in the future).");
+      return;
+    }
+
     // Trigger the mutation
     addAthleteMutation.mutate({
       name: newAthlete.name,
@@ -299,6 +300,7 @@ const filteredAthletes = useMemo(() => {
       role: 'Athlete',
       coach_id: currentUserId,
       division: newAthlete.division,
+      date_of_birth: newAthlete.date_of_birth,
     });
   };
   
@@ -597,7 +599,7 @@ const filteredAthletes = useMemo(() => {
                 onClick={() => {
                   setIsModalOpen(false);
                   setErrorMessage(null);
-                  setNewAthlete({ name: '', email: '', division: ''});
+                  setNewAthlete({ name: '', email: '', division: '', date_of_birth: '' });
                 }} 
                 className="text-slate-400 hover:text-slate-600 active:scale-90 transition-[color,transform]"
               >
@@ -641,7 +643,22 @@ const filteredAthletes = useMemo(() => {
                 <label className="text-sm font-medium text-slate-700 block mb-1">Division</label>
                 <DivisionSelect value={newAthlete.division} onChange={(v) => setNewAthlete({ ...newAthlete, division: v })} required />
               </div>
-                            
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date of Birth</label>
+                <input
+                  required
+                  type="date"
+                  value={newAthlete.date_of_birth}
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setNewAthlete({ ...newAthlete, date_of_birth: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Used to determine PRISAA age-cutoff eligibility for future events.
+                </p>
+              </div>
+
               <div className="pt-2 flex gap-3">
                 <button 
                   type="button" 

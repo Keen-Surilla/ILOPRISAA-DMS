@@ -1,4 +1,5 @@
 import { supabase } from '../config/SupabaseClient';
+import { transitionDocumentStatus } from '../services/documentStateMachine';
 
 export interface PendingDocumentRow {
   id: string;
@@ -68,25 +69,31 @@ export async function getPendingDocuments(): Promise<PendingDocumentRow[]> {
     };
   });
 }
-export async function verifyDocument(documentId: string, reviewerId: string): Promise<void> {
-  const { error } = await supabase
-    .from('documents')
-    .update({ status: 'verified', reviewed_by: reviewerId, reviewed_at: new Date().toISOString() })
-    .eq('id', documentId);
 
-  if (error) {
+export async function verifyDocument(documentId: string, reviewerId: string): Promise<void> {
+  try {
+    await transitionDocumentStatus(supabase, {
+      documentId,
+      from: 'pending_review',
+      to: 'verified',
+      reviewerId,
+    });
+  } catch (error) {
     console.error('Error verifying document:', error);
     throw new Error('Could not verify this document. Please try again.');
   }
 }
 
 export async function rejectDocument(documentId: string, reviewerId: string, notes: string): Promise<void> {
-  const { error } = await supabase
-    .from('documents')
-    .update({ status: 'action_required', reviewed_by: reviewerId, reviewed_at: new Date().toISOString(), notes })
-    .eq('id', documentId);
-
-  if (error) {
+  try {
+    await transitionDocumentStatus(supabase, {
+      documentId,
+      from: 'pending_review',
+      to: 'action_required',
+      rejectionReason: notes,
+      reviewerId,
+    });
+  } catch (error) {
     console.error('Error rejecting document:', error);
     throw new Error('Could not reject this document. Please try again.');
   }
@@ -97,4 +104,3 @@ export async function getSignedUrl(storagePath: string): Promise<string> {
   if (error || !data) throw new Error('Could not generate a link to view this file.');
   return data.signedUrl;
 }
-

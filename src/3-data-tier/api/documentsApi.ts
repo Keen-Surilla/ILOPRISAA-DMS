@@ -9,61 +9,57 @@ export type DocumentRow = Database['public']['Tables']['documents']['Row'];
 export interface DocumentCategoryItem {
   type: DocumentType;
   label: string;
+  category: 'permanent' | 'annual';
 }
+
 
 export interface DocumentCategory {
   id: string;
   title: string;
+  description: string;
   items: DocumentCategoryItem[];
 }
 
-// Single source of truth for the whole checklist. Add/remove/reorder a
-// requirement here and the accordion sections, progress bar, roster badge,
-// and completion count all update automatically — nothing else to touch.
+
 export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   {
     id: 'academic_records',
     title: 'Academic Records',
+    description: 'These must be resubmitted each school year.',
     items: [
-      { type: 'transcript_sem1', label: 'Transcript Semester 1' },
-      { type: 'transcript_sem2', label: 'Transcript Semester 2' },
+      { type: 'transcript_sem1', label: 'Transcript Semester 1', category: 'annual' },
+      { type: 'transcript_sem2', label: 'Transcript Semester 2', category: 'annual' },
     ],
   },
   {
     id: 'civil_identity',
     title: 'Civil Identity Documents',
+    description: 'Uploaded once and reused every year.',
     items: [
-      { type: 'birth_cert_original', label: 'Original Birth Certificate' },
-      { type: 'birth_cert_xerox', label: 'Xerox Birth Certificate' },
+      { type: 'birth_cert_original', label: 'Original Birth Certificate', category: 'permanent' },
+      { type: 'birth_cert_xerox', label: 'Xerox Birth Certificate', category: 'permanent' },
     ],
   },
   {
     id: 'medical_clearances',
     title: 'Medical Clearances',
+    description: 'These must be resubmitted each school year.',
     items: [
-      { type: 'medical_cert_1', label: 'Medical Certificate 1' },
-      { type: 'medical_cert_2', label: 'Medical Certificate 2' },
-    ],
-  },
-  {
-    id: 'visual_identification',
-    title: 'Visual Identification',
-    items: [
-      { type: 'id_picture_1', label: '2x2 Picture 1' },
-      { type: 'id_picture_2', label: '2x2 Picture 2' },
+      { type: 'medical_cert_1', label: 'Medical Certificate 1', category: 'annual' },
+      { type: 'medical_cert_2', label: 'Medical Certificate 2', category: 'annual' },
     ],
   },
   {
     id: 'legal_consent',
     title: 'Legal & Consent Requirements',
+    description: 'Uploaded once and reused every year.',
     items: [
-      { type: 'parental_consent', label: 'Parental Consent' },
+      { type: 'parental_consent', label: 'Parental Consent', category: 'permanent' },
+      { type: 'data_privacy_consent', label: 'Data Privacy Consent', category: 'permanent' },
     ],
   },
 ];
 
-// Derived, not hand-duplicated — flattening DOCUMENT_CATEGORIES instead of
-// maintaining a second parallel list that could drift out of sync.
 export const REQUIRED_DOCUMENTS: DocumentCategoryItem[] = DOCUMENT_CATEGORIES.flatMap(c => c.items);
 export const TOTAL_REQUIRED_DOCUMENTS = REQUIRED_DOCUMENTS.length;
 

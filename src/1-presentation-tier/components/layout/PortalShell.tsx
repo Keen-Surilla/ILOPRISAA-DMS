@@ -35,7 +35,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   committee: 'Committee Portal',
 };
 
-export function PortalShell({ portalTitle, navGroups, children }: PortalShellProps) {
+export function PortalShell({ portalTitle, navGroups = [], children }: PortalShellProps) {
   const navigate = useNavigate();
   const { user, role, signOut } = useAuthStore();
 
