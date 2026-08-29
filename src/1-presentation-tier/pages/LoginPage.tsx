@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
-import { validateLoginInput } from '../../2-application-tier/validators/payloadValidators';
+import { validateLoginInput } from '../../2-application-tier/utils/validators/payloadValidators';
 import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
 
 import Logo1 from '../../assets/Logo1.svg';
@@ -39,7 +39,23 @@ export default function LoginPage() {
         setError(result.error);
         return;
       }
-      navigate('/home', { replace: true });
+
+      // 1. Get the role from your auth result or store. 
+      // (Adjust 'result.user.user_metadata.role' based on how you structured your Supabase metadata)
+      const userRole = result.role;
+      
+      // ADD THIS LINE TEMPORARILY:
+      //console.log("THE FETCHED ROLE IS:", userRole)//
+
+      // 2. Route conditionally based on the role
+      if (userRole === 'committee') {
+        // Change '/committee' to whatever your actual route path is for CommitteeDashboard
+        navigate('/committee', { replace: true }); 
+      } else {
+        // Defaults to coach dashboard
+        navigate('/home', { replace: true });
+      }
+      
     } catch (err: any) {
       setError(err?.message || 'Something went wrong. Please try again.');
     } finally {

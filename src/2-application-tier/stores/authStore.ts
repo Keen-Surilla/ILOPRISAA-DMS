@@ -12,7 +12,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; role?: string | null }>;
   signUp: (
     email: string, 
     password: string, 
@@ -21,7 +21,8 @@ interface AuthState {
     dob: string,
     gender: string,
     school: string,
-    sport: string
+    sport: string,
+    role: string
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -132,7 +133,7 @@ sendAthleteOtp: async (email: string) => {
     });
   },
 
-  signUp: async (email, password, fullName, phone, dob, gender, school, sport) => {
+  signUp: async (email, password, fullName, phone, dob, gender, school, sport, role) => {
     set({ isLoading: true });
     try {
       const { error } = await supabase.auth.signUp({
@@ -146,6 +147,7 @@ sendAthleteOtp: async (email: string) => {
             gender: gender,
             school: school,
             sport: sport,
+            role: role,
           },
         },
       });
@@ -180,7 +182,7 @@ sendAthleteOtp: async (email: string) => {
     }
 
     set({ user: profile, role: profile.role, isAuthenticated: true, isLoading: false });
-    return { error: null };
+    return { error: null, role: profile.role };
   },
 
   signOut: async () => {

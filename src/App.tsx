@@ -43,7 +43,7 @@ useEffect(() => {
       window.removeEventListener('focus', handleWindowFocus);
     };
 
-  }, []);
+  }, [initialize, signOut]);
 
   return (
     <SecureErrorBoundary fallbackTitle="Server Connection Error">
