@@ -11,6 +11,7 @@ export interface PendingDocumentRow {
   created_at: string;
   athlete_name: string;
   coach_name: string;
+  institution_id: string | null;
 }
 
 export async function getPendingDocuments(): Promise<PendingDocumentRow[]> {
@@ -43,7 +44,7 @@ export async function getPendingDocuments(): Promise<PendingDocumentRow[]> {
 
   const { data: coaches, error: coachesError } = await supabase
     .from('profiles')
-    .select('id, full_name')
+    .select('id, full_name, institution_id')
     .in('id', coachIds);
 
   if (coachesError) {
@@ -52,10 +53,11 @@ export async function getPendingDocuments(): Promise<PendingDocumentRow[]> {
   }
 
   const athleteMap = new Map((athletes ?? []).map((a) => [a.id, a]));
-  const coachMap = new Map((coaches ?? []).map((c) => [c.id, c.full_name]));
+    const coachMap = new Map((coaches ?? []).map((c) => [c.id, c]));
 
   return documents.map((doc) => {
     const athlete = athleteMap.get(doc.athlete_id);
+    const coach = athlete ? coachMap.get(athlete.coach_id) : undefined;
     return {
       id: doc.id,
       athlete_id: doc.athlete_id,
@@ -65,7 +67,8 @@ export async function getPendingDocuments(): Promise<PendingDocumentRow[]> {
       storage_path: doc.storage_path,
       created_at: doc.created_at,
       athlete_name: athlete?.name ?? 'Unknown',
-      coach_name: (athlete && coachMap.get(athlete.coach_id)) ?? 'Unknown',
+      coach_name: coach?.full_name ?? 'Unknown',
+      institution_id: coach?.institution_id ?? null,
     };
   });
 }

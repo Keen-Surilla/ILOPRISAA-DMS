@@ -1,274 +1,343 @@
 import { supabase } from '../config/SupabaseClient';
-import type { Database } from '../types/database.types';
-import type { DocumentType } from '../types/database.types.extras';
+import { transitionDocumentStatus } from '../services/documentStateMachine';
+import type { Document, DocumentType } from '../types/database.types.extras';
 
-import { withAuthRetry } from '../../2-application-tier/utils/withAuthRetry';
+// Total number of document slots (permanent + annual) required per athlete per cycle.
+export const TOTAL_REQUIRED_DOCUMENTS = 8;
 
-export type DocumentRow = Database['public']['Tables']['documents']['Row'];
+export type DocumentRow = Document;
 
-export interface DocumentCategoryItem {
+export interface RequiredDocumentItem {
   type: DocumentType;
   label: string;
   category: 'permanent' | 'annual';
 }
 
-
-export interface DocumentCategory {
-  id: string;
+export interface DocumentCategoryGroup {
+  id: 'permanent' | 'annual';
   title: string;
-  description: string;
-  items: DocumentCategoryItem[];
+  items: RequiredDocumentItem[];
 }
 
-
-export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
+export const DOCUMENT_CATEGORIES: DocumentCategoryGroup[] = [
   {
-    id: 'academic_records',
-    title: 'Academic Records',
-    description: 'These must be resubmitted each school year.',
+    id: 'permanent',
+    title: 'Permanent Documents',
     items: [
-      { type: 'transcript_sem1', label: 'Transcript Semester 1', category: 'annual' },
-      { type: 'transcript_sem2', label: 'Transcript Semester 2', category: 'annual' },
-    ],
-  },
-  {
-    id: 'civil_identity',
-    title: 'Civil Identity Documents',
-    description: 'Uploaded once and reused every year.',
-    items: [
-      { type: 'birth_cert_original', label: 'Original Birth Certificate', category: 'permanent' },
-      { type: 'birth_cert_xerox', label: 'Xerox Birth Certificate', category: 'permanent' },
-    ],
-  },
-  {
-    id: 'medical_clearances',
-    title: 'Medical Clearances',
-    description: 'These must be resubmitted each school year.',
-    items: [
-      { type: 'medical_cert_1', label: 'Medical Certificate 1', category: 'annual' },
-      { type: 'medical_cert_2', label: 'Medical Certificate 2', category: 'annual' },
-    ],
-  },
-  {
-    id: 'legal_consent',
-    title: 'Legal & Consent Requirements',
-    description: 'Uploaded once and reused every year.',
-    items: [
-      { type: 'parental_consent', label: 'Parental Consent', category: 'permanent' },
+      { type: 'birth_certificate_copy1', label: 'Birth Certificate (Copy 1)', category: 'permanent' },
+      { type: 'birth_certificate_copy2', label: 'Birth Certificate (Copy 2)', category: 'permanent' },
       { type: 'data_privacy_consent', label: 'Data Privacy Consent', category: 'permanent' },
+    ],
+  },
+  {
+    id: 'annual',
+    title: 'Annual Documents',
+    items: [
+      { type: 'waiver', label: 'Waiver', category: 'annual' },
+      { type: 'tor_1st_sem', label: 'Transcript of Records (1st Sem)', category: 'annual' },
+      { type: 'tor_2nd_sem', label: 'Transcript of Records (2nd Sem)', category: 'annual' },
+      { type: 'medical_clearance_copy1', label: 'Medical Clearance (Copy 1)', category: 'annual' },
+      { type: 'medical_clearance_copy2', label: 'Medical Clearance (Copy 2)', category: 'annual' },
     ],
   },
 ];
 
-export const REQUIRED_DOCUMENTS: DocumentCategoryItem[] = DOCUMENT_CATEGORIES.flatMap(c => c.items);
-export const TOTAL_REQUIRED_DOCUMENTS = REQUIRED_DOCUMENTS.length;
+// Flat list of all 8 required document slots, derived from DOCUMENT_CATEGORIES above.
+export const REQUIRED_DOCUMENTS: RequiredDocumentItem[] = DOCUMENT_CATEGORIES.flatMap((c) => c.items);
 
-const BUCKET = 'athlete-documents';
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
-const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png'];
-const UPLOAD_TIMEOUT_MS = 20_000; // never let the UI spin forever
+// Quick lookup of permanent/annual for a given document_type, used when saving a new upload.
+const DOCUMENT_TYPE_CATEGORY: Record<string, 'permanent' | 'annual'> = Object.fromEntries(
+  REQUIRED_DOCUMENTS.map((d) => [d.type, d.category])
+);
 
-export class DocumentApiError extends Error {
-  readonly code: string;
-  constructor(message: string, code: string) {
-    super(message);
-    this.name = 'DocumentApiError';
-    this.code = code;
+export interface PendingDocumentRow {
+  id: string;
+  athlete_id: string;
+  document_type: string;
+  status: string;
+  original_filename: string;
+  storage_path: string;
+  created_at: string;
+  athlete_name: string;
+  coach_name: string;
+  institution_id: string | null;
+}
+
+export async function getPendingDocuments(): Promise<PendingDocumentRow[]> {
+  const { data: documents, error: docsError } = await supabase
+    .from('documents')
+    .select('id, athlete_id, document_type, status, original_filename, storage_path, created_at')
+    .eq('status', 'pending_review')
+    .order('created_at', { ascending: true });
+
+  if (docsError) {
+    console.error('Error fetching pending documents:', docsError);
+    throw new Error('Could not load pending documents. Please try again.');
   }
-}
 
-function describeDbError(fallbackMessage: string, fallbackCode: string, error: unknown): DocumentApiError {
-  const message = (error as { message?: string })?.message ?? '';
-  if (message.includes('RATE_LIMIT_EXCEEDED')) {
-    return new DocumentApiError("You're doing that too quickly. Please wait a moment and try again.", 'RATE_LIMITED');
+  if (!documents || documents.length === 0) return [];
+
+  const athleteIds = [...new Set(documents.map((d) => d.athlete_id))];
+
+  const { data: athletes, error: athletesError } = await supabase
+    .from('team_members')
+    .select('id, name, coach_id')
+    .in('id', athleteIds);
+
+  if (athletesError) {
+    console.error('Error fetching athletes:', athletesError);
+    throw new Error('Could not load athlete info. Please try again.');
   }
-  return new DocumentApiError(fallbackMessage, fallbackCode);
-}
 
-function assertValidFile(file: File): void {
-  if (file.size > MAX_FILE_BYTES) {
-    throw new DocumentApiError('File is too large (max 10MB).', 'FILE_TOO_LARGE');
+  const coachIds = [...new Set((athletes ?? []).map((a) => a.coach_id).filter(Boolean))];
+
+  const { data: coaches, error: coachesError } = await supabase
+    .from('profiles')
+    .select('id, full_name, institution_id')
+    .in('id', coachIds);
+
+  if (coachesError) {
+    console.error('Error fetching coaches:', coachesError);
+    throw new Error('Could not load coach info. Please try again.');
   }
-  if (!ALLOWED_MIME.includes(file.type)) {
-    throw new DocumentApiError('Only PDF, JPG, or PNG files are allowed.', 'INVALID_FILE_TYPE');
-  }
-}
 
-async function hashFile(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
+  const athleteMap = new Map((athletes ?? []).map((a) => [a.id, a]));
+  const coachMap = new Map((coaches ?? []).map((c) => [c.id, c]));
 
-function fileExtension(filename: string): string {
-  const idx = filename.lastIndexOf('.');
-  return idx >= 0 ? filename.slice(idx) : '';
-}
-
-function withTimeout<T>(operation: () => PromiseLike<T>, ms: number, timeoutMessage: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new DocumentApiError(timeoutMessage, 'TIMEOUT')), ms);
+  return documents.map((doc) => {
+    const athlete = athleteMap.get(doc.athlete_id);
+    const coach = athlete ? coachMap.get(athlete.coach_id) : undefined;
+    return {
+      id: doc.id,
+      athlete_id: doc.athlete_id,
+      document_type: doc.document_type,
+      status: doc.status,
+      original_filename: doc.original_filename,
+      storage_path: doc.storage_path,
+      created_at: doc.created_at,
+      athlete_name: athlete?.name ?? 'Unknown',
+      coach_name: coach?.full_name ?? 'Unknown',
+      institution_id: coach?.institution_id ?? null,
+    };
   });
-
-  return Promise.race([Promise.resolve(operation()), timeout]).finally(() => {
-    clearTimeout(timer);
-  });
 }
 
+export async function verifyDocument(documentId: string, reviewerId: string): Promise<void> {
+  try {
+    await transitionDocumentStatus(supabase, {
+      documentId,
+      from: 'pending_review',
+      to: 'verified',
+      reviewerId,
+    });
+  } catch (error) {
+    console.error('Error verifying document:', error);
+    throw new Error('Could not verify this document. Please try again.');
+  }
+}
+
+export async function rejectDocument(documentId: string, reviewerId: string, notes: string): Promise<void> {
+  try {
+    await transitionDocumentStatus(supabase, {
+      documentId,
+      from: 'pending_review',
+      to: 'action_required',
+      rejectionReason: notes,
+      reviewerId,
+    });
+  } catch (error) {
+    console.error('Error rejecting document:', error);
+    throw new Error('Could not reject this document. Please try again.');
+  }
+}
+
+export async function getSignedUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage.from('athlete-documents').createSignedUrl(storagePath, 60 * 5);
+  if (error || !data) throw new Error('Could not generate a link to view this file.');
+  return data.signedUrl;
+}
+
+/**
+ * Number of submitted document slots per athlete (verified or pending_review).
+ * Documents in 'action_required' are excluded since they need to be re-submitted
+ * and shouldn't count toward a "complete" checklist.
+ * NOTE: adjust the status list below if your state machine uses different values.
+ */
+export async function getDocumentCountsForAthletes(athleteIds: string[]): Promise<Record<string, number>> {
+  if (athleteIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('athlete_id, status')
+    .in('athlete_id', athleteIds)
+    .in('status', ['verified', 'pending_review']);
+
+  if (error) {
+    console.error('Error fetching document counts:', error);
+    throw new Error('Could not load document counts. Please try again.');
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.athlete_id] = (counts[row.athlete_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Counts of documents grouped by status across the given athletes.
+ * e.g. { pending_review: 4, verified: 12, action_required: 1 }
+ */
+export async function getDocumentStatusCounts(athleteIds: string[]): Promise<Record<string, number>> {
+  if (athleteIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('status')
+    .in('athlete_id', athleteIds);
+
+  if (error) {
+    console.error('Error fetching document status counts:', error);
+    throw new Error('Could not load document status counts. Please try again.');
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    counts[row.status] = (counts[row.status] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Raw created_at timestamps for every document belonging to the given athletes.
+ * Used to build the cumulative "Activity Overview" trend line.
+ */
+export async function getUploadTimestamps(athleteIds: string[]): Promise<string[]> {
+  if (athleteIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('created_at')
+    .in('athlete_id', athleteIds);
+
+  if (error) {
+    console.error('Error fetching upload timestamps:', error);
+    throw new Error('Could not load upload timestamps. Please try again.');
+  }
+
+  return (data ?? []).map((row) => row.created_at);
+}
+
+/**
+ * All documents currently on file for one athlete (used by the checklist modal).
+ */
+export async function getDocumentsForAthlete(athleteId: string): Promise<DocumentRow[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching documents for athlete:', error);
+    throw new Error("Could not load this athlete's documents. Please try again.");
+  }
+
+  return (data ?? []) as DocumentRow[];
+}
+
+/**
+ * Uploads a file for one checklist slot (document_type) and saves the row.
+ * Also used for "Replace" in the checklist modal — if a document already exists
+ * for this athlete + type, the old file and row are removed first so the slot
+ * only ever holds one current file.
+ */
+export async function uploadDocument(
+  athleteId: string,
+  type: DocumentType,
+  file: File
+): Promise<DocumentRow> {
+  const { data: existing, error: existingError } = await supabase
+    .from('documents')
+    .select('id, storage_path')
+    .eq('athlete_id', athleteId)
+    .eq('document_type', type)
+    .maybeSingle();
+
+  if (existingError) {
+    console.error('Error checking for existing document:', existingError);
+    throw new Error('Could not check for an existing file. Please try again.');
+  }
+
+  if (existing) {
+    await removeDocument(existing.id, existing.storage_path);
+  }
+
+  const storagePath = `${athleteId}/${type}/${Date.now()}-${file.name}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('athlete-documents')
+    .upload(storagePath, file, { upsert: false });
+
+  if (uploadError) {
+    console.error('Error uploading file:', uploadError);
+    throw new Error('Could not upload file. Please try again.');
+  }
+
+  const { data, error: insertError } = await supabase
+    .from('documents')
+    .insert({
+      athlete_id: athleteId,
+      document_type: type,
+      document_category: DOCUMENT_TYPE_CATEGORY[type] ?? null,
+      original_filename: file.name,
+      mime_type: file.type,
+      file_size_bytes: file.size,
+      storage_path: storagePath,
+      status: 'pending_review',
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    // Clean up the orphaned storage file since the row failed to save.
+    await supabase.storage.from('athlete-documents').remove([storagePath]);
+    console.error('Error saving document record:', insertError);
+    throw new Error('Could not save this document. Please try again.');
+  }
+
+  return data as DocumentRow;
+}
+
+/**
+ * Removes a document's file from storage and deletes its row.
+ */
+export async function removeDocument(documentId: string, storagePath: string): Promise<void> {
+  const { error: storageError } = await supabase.storage.from('athlete-documents').remove([storagePath]);
+  if (storageError) {
+    console.error('Error removing file from storage:', storageError);
+    throw new Error('Could not remove file from storage. Please try again.');
+  }
+
+  const { error: dbError } = await supabase.from('documents').delete().eq('id', documentId);
+  if (dbError) {
+    console.error('Error removing document record:', dbError);
+    throw new Error('Could not remove this document. Please try again.');
+  }
+}
+
+// Grouped object so callers can do `documentsApi.getX(...)` (used by CoachDashboard.tsx
+// and DocumentChecklistModal.tsx). Individual named exports above are kept for any
+// files importing them directly.
 export const documentsApi = {
-  async getDocumentsForAthlete(athleteId: string): Promise<DocumentRow[]> {
-    const { data, error } = await withAuthRetry(() => supabase
-      .from('documents')
-      .select('*')
-      .eq('athlete_id', athleteId));
-
-    if (error) {
-      console.error('API Error fetching documents:', error);
-      throw new DocumentApiError('Could not load documents. Please try again.', 'FETCH_FAILED');
-    }
-    return data ?? [];
-  },
-
-  // One query for the whole roster's progress badges instead of one query
-  // per athlete row.
-  async getDocumentCountsForAthletes(athleteIds: string[]): Promise<Record<string, number>> {
-    if (athleteIds.length === 0) return {};
-
-    const { data, error } = await withAuthRetry(() => supabase
-      .from('documents')
-      .select('athlete_id, document_type')
-      .in('athlete_id', athleteIds));
-
-    if (error) {
-      console.error('API Error fetching document counts:', error);
-      throw new DocumentApiError('Could not load document status.', 'FETCH_FAILED');
-    }
-
-    const requiredTypes = new Set(REQUIRED_DOCUMENTS.map(d => d.type));
-    const counts: Record<string, number> = {};
-    for (const row of data ?? []) {
-      if (!requiredTypes.has(row.document_type as DocumentType)) continue;
-      counts[row.athlete_id] = (counts[row.athlete_id] ?? 0) + 1;
-    }
-    return counts;
-  },
-
-  // Counts documents by review status across the whole roster in one query
-  // — powers the dashboard's "Pending Reviews" KPI.
-  async getDocumentStatusCounts(athleteIds: string[]): Promise<Record<string, number>> {
-    if (athleteIds.length === 0) return {};
-
-    const { data, error } = await withAuthRetry(() => supabase
-      .from('documents')
-      .select('status')
-      .in('athlete_id', athleteIds));
-
-    if (error) {
-      console.error('API Error fetching document status counts:', error);
-      throw new DocumentApiError('Could not load document status.', 'FETCH_FAILED');
-    }
-
-    const counts: Record<string, number> = {};
-    for (const row of data ?? []) {
-      counts[row.status] = (counts[row.status] ?? 0) + 1;
-    }
-    return counts;
-  },
-
-  // Every document row already has created_at — reusing it here to
-  // reconstruct historical completion progress, rather than requiring a
-  // new column or a separate event-log table just for a trend chart.
-  async getUploadTimestamps(athleteIds: string[]): Promise<string[]> {
-    if (athleteIds.length === 0) return [];
-
-    const { data, error } = await withAuthRetry(() => supabase
-      .from('documents')
-      .select('created_at')
-      .in('athlete_id', athleteIds));
-
-    if (error) {
-      console.error('API Error fetching upload timestamps:', error);
-      throw new DocumentApiError('Could not load upload history.', 'FETCH_FAILED');
-    }
-    return (data ?? []).map(row => row.created_at);
-  },
-
-  async uploadDocument(athleteId: string, documentType: DocumentType, file: File): Promise<DocumentRow> {
-    assertValidFile(file);
-
-    const digitalSignature = await hashFile(file);
-    const storagePath = `${athleteId}/${documentType}${fileExtension(file.name)}`;
-
-    const { error: uploadError } = await withAuthRetry(() => withTimeout(
-      () => supabase.storage.from(BUCKET).upload(storagePath, file, { upsert: true, contentType: file.type }),
-      UPLOAD_TIMEOUT_MS,
-      'Upload timed out. Please check your connection and try again.'
-    ));
-
-    if (uploadError) {
-      console.error('Storage upload error:', uploadError);
-      throw new DocumentApiError('Could not upload the file. Please try again.', 'UPLOAD_FAILED');
-    }
-
-    // Upsert so re-uploading a slot replaces its existing row instead of
-    // creating a duplicate — relies on the unique(athlete_id, document_type)
-    // constraint from documents_requirements_migration.sql.
-    const { data, error } = await withAuthRetry(() => withTimeout(
-      () => supabase
-        .from('documents')
-        .upsert(
-          {
-            athlete_id: athleteId,
-            document_type: documentType,
-            status: 'pending_review',
-            storage_path: storagePath,
-            file_size_bytes: file.size,
-            mime_type: file.type,
-            original_filename: file.name.slice(0, 200),
-            notes: null,
-            digital_signature: digitalSignature,
-            metadata: null,
-          },
-          { onConflict: 'athlete_id,document_type' }
-        )
-        .select()
-        .single(),
-      UPLOAD_TIMEOUT_MS,
-      'Saving the file record timed out. Please try again.'
-    ));
-
-    if (error || !data) {
-      console.error('DB error saving document record:', error);
-      throw describeDbError('File uploaded, but saving the record failed. Please try again.', 'SAVE_FAILED', error);
-    }
-    return data;
-  },
-
-  // Bucket is private — files are only accessible via short-lived signed URLs.
-  async getSignedUrl(storagePath: string): Promise<string> {
-    const { data, error } = await withAuthRetry(() => supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(storagePath, 60 * 5)); // 5 minutes
-
-    if (error || !data) {
-      throw new DocumentApiError('Could not generate a link to view this file.', 'SIGNED_URL_FAILED');
-    }
-    return data.signedUrl;
-  },
-
-  async removeDocument(documentId: string, storagePath: string): Promise<void> {
-    const { error: storageError } = await withAuthRetry(() => supabase.storage.from(BUCKET).remove([storagePath]));
-    if (storageError) {
-      // Not fatal — the DB row is the source of truth for "is this slot
-      // filled", so still remove the row even if the storage cleanup fails.
-      console.error('Storage removal error (continuing):', storageError);
-    }
-
-    const { error } = await withAuthRetry(() => supabase.from('documents').delete().eq('id', documentId));
-    if (error) {
-      console.error('DB error removing document:', error);
-      throw describeDbError('Could not remove this document. Please try again.', 'DELETE_FAILED', error);
-    }
-  },
+  getPendingDocuments,
+  verifyDocument,
+  rejectDocument,
+  getSignedUrl,
+  getDocumentCountsForAthletes,
+  getDocumentStatusCounts,
+  getUploadTimestamps,
+  getDocumentsForAthlete,
+  uploadDocument,
+  removeDocument,
 };

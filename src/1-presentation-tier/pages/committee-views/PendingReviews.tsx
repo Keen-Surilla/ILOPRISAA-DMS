@@ -4,6 +4,7 @@ import { CheckCircle2, XCircle, ExternalLink, ChevronDown, Search, Building2, Lo
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import { getPendingDocuments, verifyDocument, rejectDocument, getSignedUrl } from '../../../3-data-tier/api/committeeApi';
+import { findSchool } from '../../../3-data-tier/constant/schools';
 
 type PendingDoc = Awaited<ReturnType<typeof getPendingDocuments>>[number];
 
@@ -11,26 +12,39 @@ function prettifyDocType(type: string): string {
   return type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Groups by coach — the closest thing to a "school/team" label the current
-// document shape carries. If a dedicated school_name field exists elsewhere
-// in your schema, swap `doc.coach_name` below for that and this whole
-// grouping upgrades for free.
 function groupDocuments(documents: PendingDoc[]) {
-  const teams = new Map<string, Map<string, PendingDoc[]>>();
+  // schoolKey -> { label, coaches: Map<coachName, Map<athleteName, docs[]>> }
+  const schools = new Map<string, { label: string; coaches: Map<string, Map<string, PendingDoc[]>> }>();
 
   for (const doc of documents) {
-    const teamKey = doc.coach_name || 'Unassigned';
+    const school = findSchool(doc.institution_id);
+    const schoolKey = school?.id ?? 'UNASSIGNED';
+    const schoolLabel = school?.name ?? 'Unassigned School';
+    const coachKey = doc.coach_name || 'Unassigned Coach';
     const athleteKey = doc.athlete_name || 'Unknown Athlete';
-    if (!teams.has(teamKey)) teams.set(teamKey, new Map());
-    const athletes = teams.get(teamKey)!;
+
+    if (!schools.has(schoolKey)) {
+      schools.set(schoolKey, { label: schoolLabel, coaches: new Map() });
+    }
+    const schoolGroup = schools.get(schoolKey)!;
+
+    if (!schoolGroup.coaches.has(coachKey)) schoolGroup.coaches.set(coachKey, new Map());
+    const athletes = schoolGroup.coaches.get(coachKey)!;
     if (!athletes.has(athleteKey)) athletes.set(athleteKey, []);
     athletes.get(athleteKey)!.push(doc);
   }
 
-  return Array.from(teams.entries()).map(([teamName, athleteMap]) => ({
-    teamName,
-    totalDocs: Array.from(athleteMap.values()).reduce((sum, docs) => sum + docs.length, 0),
-    athletes: Array.from(athleteMap.entries()).map(([athleteName, docs]) => ({ athleteName, docs })),
+  return Array.from(schools.entries()).map(([schoolKey, school]) => ({
+    schoolKey,
+    schoolName: school.label,
+    totalDocs: Array.from(school.coaches.values())
+      .flatMap((athleteMap) => Array.from(athleteMap.values()))
+      .reduce((sum, docs) => sum + docs.length, 0),
+    coaches: Array.from(school.coaches.entries()).map(([coachName, athleteMap]) => ({
+      coachName,
+      totalDocs: Array.from(athleteMap.values()).reduce((sum, docs) => sum + docs.length, 0),
+      athletes: Array.from(athleteMap.entries()).map(([athleteName, docs]) => ({ athleteName, docs })),
+    })),
   }));
 }
 
@@ -41,7 +55,7 @@ export default function PendingReviews() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
   const [search, setSearch] = useState('');
-  const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
+  const [collapsedSchools, setCollapsedSchools] = useState<Set<string>>(new Set());
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['pendingDocuments'],
@@ -73,18 +87,20 @@ export default function PendingReviews() {
     return documents.filter(
       (doc) =>
         doc.athlete_name?.toLowerCase().includes(q) ||
-        doc.coach_name?.toLowerCase().includes(q)
+        doc.coach_name?.toLowerCase().includes(q) ||
+        doc.institution_id?.toLowerCase().includes(q) ||
+        findSchool(doc.institution_id)?.name.toLowerCase().includes(q)
     );
   }, [documents, search]);
 
-  const teamGroups = useMemo(() => groupDocuments(filteredDocuments), [filteredDocuments]);
+  const schoolGroups = useMemo(() => groupDocuments(filteredDocuments), [filteredDocuments]);
   const athleteCount = useMemo(() => new Set(filteredDocuments.map((d) => d.athlete_name)).size, [filteredDocuments]);
 
-  const toggleTeam = (teamName: string) => {
-    setCollapsedTeams((prev) => {
+  const toggleSchool = (schoolKey: string) => {
+    setCollapsedSchools((prev) => {
       const next = new Set(prev);
-      if (next.has(teamName)) next.delete(teamName);
-      else next.add(teamName);
+      if (next.has(schoolKey)) next.delete(schoolKey);
+      else next.add(schoolKey);
       return next;
     });
   };
@@ -104,7 +120,7 @@ export default function PendingReviews() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search athlete or team…"
+            placeholder="Search athlete, coach, or school…"
             className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-shadow"
           />
         </div>
@@ -123,17 +139,17 @@ export default function PendingReviews() {
             {search ? 'No matches found' : 'Nothing pending review'}
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            {search ? 'Try a different athlete or team name.' : "You're fully caught up."}
+            {search ? 'Try a different athlete, coach, or school.' : "You're fully caught up."}
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {teamGroups.map((team) => {
-            const isCollapsed = collapsedTeams.has(team.teamName);
+          {schoolGroups.map((school) => {
+            const isCollapsed = collapsedSchools.has(school.schoolKey);
             return (
-              <div key={team.teamName} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div key={school.schoolKey} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                 <button
-                  onClick={() => toggleTeam(team.teamName)}
+                  onClick={() => toggleSchool(school.schoolKey)}
                   className="w-full flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50/70 transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -141,99 +157,112 @@ export default function PendingReviews() {
                       <Building2 className="w-4 h-4" />
                     </div>
                     <div className="text-left min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{team.teamName}</p>
+                      <p className="text-sm font-bold text-slate-800 truncate">{school.schoolName}</p>
                       <p className="text-xs text-slate-400">
-                        {team.athletes.length} {team.athletes.length === 1 ? 'athlete' : 'athletes'}
+                        {school.coaches.length} {school.coaches.length === 1 ? 'coach' : 'coaches'}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full">
-                      {team.totalDocs} pending
+                      {school.totalDocs} pending
                     </span>
                     <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
                   </div>
                 </button>
 
                 {!isCollapsed && (
-                  <div className="divide-y divide-slate-50 border-t border-slate-50">
-                    {team.athletes.map((athlete) => (
-                      <div key={athlete.athleteName} className="px-5 py-4">
-                        <div className="flex items-center gap-2.5 mb-3">
-                          <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-[10px] font-bold uppercase shrink-0">
-                            {athlete.athleteName.charAt(0)}
-                          </div>
-                          <p className="text-sm font-semibold text-slate-700">{athlete.athleteName}</p>
-                          <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
-                            {athlete.docs.length} {athlete.docs.length === 1 ? 'doc' : 'docs'}
+                  <div className="divide-y divide-slate-100 border-t border-slate-100">
+                    {school.coaches.map((coach) => (
+                      <div key={coach.coachName} className="px-5 py-4 bg-slate-50/30">
+                        <div className="flex items-center gap-2 mb-3">
+                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{coach.coachName}</p>
+                          <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-100 px-2 py-0.5 rounded-full">
+                            {coach.totalDocs} {coach.totalDocs === 1 ? 'doc' : 'docs'}
                           </span>
                         </div>
 
-                        <ul className="space-y-2 pl-9.5 sm:pl-10">
-                          {athlete.docs.map((doc) => {
-                            const isVerifying = verifyMutation.isPending && verifyMutation.variables === doc.id;
-                            const isRejectingThis = rejectMutation.isPending && rejectingId === doc.id;
-                            return (
-                              <li key={doc.id} className="bg-slate-50/60 border border-slate-100 rounded-xl p-3">
-                                <div className="flex items-center justify-between gap-4">
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-bold text-slate-700">{prettifyDocType(doc.document_type)}</p>
-                                    <p className="text-[11px] text-slate-400 truncate">{doc.original_filename}</p>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <button
-                                      onClick={() => handleView(doc.storage_path)}
-                                      title="View document"
-                                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    >
-                                      <ExternalLink className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => verifyMutation.mutate(doc.id)}
-                                      disabled={isVerifying}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-60 rounded-lg transition-colors"
-                                    >
-                                      {isVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                                      Verify
-                                    </button>
-                                    <button
-                                      onClick={() => setRejectingId(rejectingId === doc.id ? null : doc.id)}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-                                    >
-                                      <XCircle className="w-3.5 h-3.5" /> Reject
-                                    </button>
-                                  </div>
+                        <div className="divide-y divide-slate-100/70">
+                          {coach.athletes.map((athlete) => (
+                            <div key={athlete.athleteName} className="py-3 first:pt-0">
+                              <div className="flex items-center gap-2.5 mb-3">
+                                <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-[10px] font-bold uppercase shrink-0">
+                                  {athlete.athleteName.charAt(0)}
                                 </div>
+                                <p className="text-sm font-semibold text-slate-700">{athlete.athleteName}</p>
+                                <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">
+                                  {athlete.docs.length} {athlete.docs.length === 1 ? 'doc' : 'docs'}
+                                </span>
+                              </div>
 
-                                {rejectingId === doc.id && (
-                                  <div className="mt-3 flex gap-2">
-                                    <input
-                                      value={rejectNotes}
-                                      onChange={(e) => setRejectNotes(e.target.value)}
-                                      placeholder="Reason for rejection…"
-                                      autoFocus
-                                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-shadow"
-                                    />
-                                    <button
-                                      onClick={() => rejectMutation.mutate()}
-                                      disabled={isRejectingThis}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-lg transition-colors"
-                                    >
-                                      {isRejectingThis && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                                      Confirm
-                                    </button>
-                                    <button
-                                      onClick={() => { setRejectingId(null); setRejectNotes(''); }}
-                                      className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
+                              <ul className="space-y-2 pl-9.5 sm:pl-10">
+                                {athlete.docs.map((doc) => {
+                                  const isVerifying = verifyMutation.isPending && verifyMutation.variables === doc.id;
+                                  const isRejectingThis = rejectMutation.isPending && rejectingId === doc.id;
+                                  return (
+                                    <li key={doc.id} className="bg-white border border-slate-100 rounded-xl p-3">
+                                      <div className="flex items-center justify-between gap-4">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-bold text-slate-700">{prettifyDocType(doc.document_type)}</p>
+                                          <p className="text-[11px] text-slate-400 truncate">{doc.original_filename}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <button
+                                            onClick={() => handleView(doc.storage_path)}
+                                            title="View document"
+                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                          >
+                                            <ExternalLink className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                            onClick={() => verifyMutation.mutate(doc.id)}
+                                            disabled={isVerifying}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 disabled:opacity-60 rounded-lg transition-colors"
+                                          >
+                                            {isVerifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                            Verify
+                                          </button>
+                                          <button
+                                            onClick={() => setRejectingId(rejectingId === doc.id ? null : doc.id)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                                          >
+                                            <XCircle className="w-3.5 h-3.5" /> Reject
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {rejectingId === doc.id && (
+                                        <div className="mt-3 flex gap-2">
+                                          <input
+                                            value={rejectNotes}
+                                            onChange={(e) => setRejectNotes(e.target.value)}
+                                            placeholder="Reason for rejection…"
+                                            autoFocus
+                                            className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-shadow"
+                                          />
+                                          <button
+                                            onClick={() => rejectMutation.mutate()}
+                                            disabled={isRejectingThis || !rejectNotes.trim()}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-lg transition-colors"
+                                          >
+                                            {isRejectingThis && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                            Confirm
+                                          </button>
+                                          <button
+                                            onClick={() => { setRejectingId(null); setRejectNotes(''); }}
+                                            className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

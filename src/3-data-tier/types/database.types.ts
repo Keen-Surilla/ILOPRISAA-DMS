@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -49,6 +49,21 @@ export type Database = {
           },
         ]
       }
+      document_status_transitions: {
+        Row: {
+          from_status: string
+          to_status: string
+        }
+        Insert: {
+          from_status: string
+          to_status: string
+        }
+        Update: {
+          from_status?: string
+          to_status?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           athlete_id: string
@@ -62,6 +77,7 @@ export type Database = {
           mime_type: string
           notes: string | null
           original_filename: string
+          rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string
@@ -80,6 +96,7 @@ export type Database = {
           mime_type: string
           notes?: string | null
           original_filename: string
+          rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -98,6 +115,7 @@ export type Database = {
           mime_type?: string
           notes?: string | null
           original_filename?: string
+          rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string
@@ -267,6 +285,11 @@ export type Database = {
       cleanup_expired_events: { Args: never; Returns: undefined }
       get_my_role: { Args: never; Returns: string }
       link_athlete_account: { Args: never; Returns: undefined }
+      my_coach_id: { Args: never; Returns: string }
+      my_role: {
+        Args: never
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
       run_daily_archival: { Args: never; Returns: undefined }
     }
     Enums: {

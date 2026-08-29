@@ -1,10 +1,13 @@
 // src/1-presentation-tier/pages/CommitteeDashboard.tsx
 import { lazy, Suspense, useState } from 'react';
-import { FileCheck, Bell } from 'lucide-react';
+import { FileCheck, Table2, ShieldAlert,BarChart3, Bell, ClipboardCheck, Archive, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { PortalShell } from '../components/layout/PortalShell';
 
 const PendingReviews = lazy(() => import('./committee-views/PendingReviews'));
+const MasterRecords = lazy(() => import('./committee-views/MasteerRecords'));
+const RejectedDocuments = lazy(() => import('./committee-views/RejectedDocuments'));
+const ComplianceOverview = lazy(() => import('./committee-views/ComplianceOverview'));
 
 export default function CommitteeDashboard() {
   const { user } = useAuthStore();
@@ -17,6 +20,15 @@ export default function CommitteeDashboard() {
     case 'pending':
       TabContent = <PendingReviews />;
       break;
+    case 'records':
+      TabContent = <MasterRecords />;
+      break;
+    case 'rejected':
+      TabContent = <RejectedDocuments />;
+      break;
+    case 'compliance':
+      TabContent = <ComplianceOverview />;
+      break;
     default:
       TabContent = <PendingReviews />;
   }
@@ -28,14 +40,17 @@ export default function CommitteeDashboard() {
         {
           label: null,
           items: [
-            { id: 'pending', label: 'Pending Reviews', icon: <FileCheck className="w-5 h-5" />, active: activeTab === 'pending', onClick: () => setActiveTab('pending') },
+            { id: 'pending', label: 'Review Queue', icon: <ClipboardCheck className="w-5 h-5" />, active: activeTab === 'pending', onClick: () => setActiveTab('pending') },
+            { id: 'records', label: 'Document Records', icon: <Archive className="w-5 h-5" />, active: activeTab === 'records', onClick: () => setActiveTab('records') },
+            { id: 'rejected', label: 'Flagged Documents', icon: <AlertTriangle className="w-5 h-5" />, active: activeTab === 'rejected', onClick: () => setActiveTab('rejected') },
+            { id: 'compliance', label: 'Compliance', icon: <BarChart3 className="w-5 h-5" />, active: activeTab === 'compliance', onClick: () => setActiveTab('compliance') }
           ],
         },
       ]}
     >
       <div className="font-sans text-slate-900 relative">
 
-        {/* Shared Top Header (Search Bar & Profile Avatar) — sticky on scroll, spans the full width of the portal */}
+         {/* Shared Top Header (Search Bar & Profile Avatar) — sticky on scroll, spans the full width of the portal */}
         <div className="sticky top-0 z-20 w-full h-[76px] px-8 mb-10 bg-white/90 backdrop-blur-sm border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="relative w-full max-w-md">
           </div>
@@ -54,13 +69,13 @@ export default function CommitteeDashboard() {
             </div>
           </div>
         </div>
-
+ 
         <div className="max-w-7xl mx-auto px-8 pb-8">
           <Suspense fallback={<div className="p-8 text-center text-sm text-slate-400">Loading…</div>}>
             {TabContent}
           </Suspense>
         </div>
-
+ 
       </div>
     </PortalShell>
   );

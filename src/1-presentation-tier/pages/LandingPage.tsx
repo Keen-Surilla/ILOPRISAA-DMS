@@ -52,7 +52,7 @@ function CredentialBadge() {
   const state = CREDENTIAL_STATES[step];
 
   return (
-    <div className="w-120 bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-900/15 p-4 absolute bottom-10 -left-115 md:right-0">
+    <div className="w-[min(300px,calc(100vw_-_2rem))] sm:w-80 lg:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-900/15 p-4">
       <div className="flex items-center justify-between">
         <p className="font-mono text-[10px] tracking-wider text-slate-500 uppercase">Credential #A-2291</p>
         <FileCheck2 className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
@@ -308,10 +308,7 @@ export default function LandingPage() {
         </nav>
         <button
           onClick={() => navigate('/login')}
-          className="text-white text-sm px-5 py-3 rounded-xl font-bold transition-colors"
-          style={{ backgroundColor: NAVY }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = BLUE)}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = NAVY)}
+          className="text-white text-sm px-5 py-3 rounded-xl font-bold bg-[#1E3A8A] hover:bg-[#2563EB] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
         >
           Sign in
         </button>
@@ -362,10 +359,8 @@ export default function LandingPage() {
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <button
                   onClick={() => navigate('/login')}
-                  className="text-white px-7 py-3.5 rounded-xl font-bold transition-colors shadow-lg inline-flex items-center gap-2"
-                  style={{ backgroundColor: BLUE, boxShadow: '0 10px 25px -5px rgba(37,99,235,0.3)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = NAVY)}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = BLUE)}
+                  className="text-white px-7 py-3.5 rounded-xl font-bold shadow-lg inline-flex items-center gap-2 bg-[#2563EB] hover:bg-[#1E3A8A] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
+                  style={{ boxShadow: '0 10px 25px -5px rgba(37,99,235,0.3)' }}
                 >
                   Get started
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -398,7 +393,7 @@ export default function LandingPage() {
               alt="ILOPRISAA student-athletes competing in track, basketball, volleyball, and swimming"
               className="w-full h-auto"
             />
-          <div className="absolute bottom-20 right-20">             
+          <div className="absolute bottom-4 right-4">             
             <CredentialBadge />
             </div>
           </div>
@@ -502,10 +497,8 @@ export default function LandingPage() {
             </p>
             <button
               onClick={() => navigate('/login')}
-              className="mt-8 text-white px-8 py-3.5 rounded-xl font-bold transition-colors shadow-lg inline-flex items-center gap-2"
-              style={{ backgroundColor: BLUE, boxShadow: '0 10px 25px -5px rgba(37,99,235,0.3)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = NAVY)}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = BLUE)}
+              className="mt-8 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg inline-flex items-center gap-2 bg-[#2563EB] hover:bg-[#1E3A8A] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#2563EB]"
+              style={{ boxShadow: '0 10px 25px -5px rgba(37,99,235,0.3)' }}
             >
               Sign in to your account
               <ArrowRight className="h-4 w-4" aria-hidden="true" />

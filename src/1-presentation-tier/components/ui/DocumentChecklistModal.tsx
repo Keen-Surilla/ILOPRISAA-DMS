@@ -70,13 +70,20 @@ export function DocumentChecklistModal({
     return map;
   }, [documents]);
 
-  const completedCount = REQUIRED_DOCUMENTS.filter((req) => byType.has(req.type)).length;
+  // A slot only counts as "filled" if it's pending_review or verified —
+  // this must exactly match the status list in getDocumentCountsForAthletes()
+  // in documentsApi.ts. action_required (rejected) and expired documents both
+  // need resubmission, so neither should count toward completion.
+  const isSlotFilled = (doc: DocumentRow | undefined) =>
+    doc?.status === 'verified' || doc?.status === 'pending_review';
+
+  const completedCount = REQUIRED_DOCUMENTS.filter((req) => isSlotFilled(byType.get(req.type))).length;
   const isComplete = completedCount === TOTAL_REQUIRED_DOCUMENTS;
 
   useEffect(() => {
     if (!isOpen || isLoading) return;
     const firstIncomplete = DOCUMENT_CATEGORIES.find((cat) =>
-      cat.items.some((item) => !byType.has(item.type))
+      cat.items.some((item) => !isSlotFilled(byType.get(item.type)))
     );
     setOpenCategoryId(firstIncomplete?.id ?? DOCUMENT_CATEGORIES[0]?.id ?? null);
   }, [isOpen, athleteId, isLoading]);
@@ -232,7 +239,7 @@ export function DocumentChecklistModal({
             </p>
           ) : (
             DOCUMENT_CATEGORIES.map((category) => {
-              const doneInCategory = category.items.filter((item) => byType.has(item.type)).length;
+              const doneInCategory = category.items.filter((item) => isSlotFilled(byType.get(item.type))).length;
               const categoryComplete = doneInCategory === category.items.length;
               const isOpenCat = openCategoryId === category.id;
 
@@ -275,22 +282,33 @@ export function DocumentChecklistModal({
                         {category.items.map((item) => {
                           const doc = byType.get(item.type);
                           const isBusy = pendingType === item.type;
+                          const isRejected = doc?.status === 'action_required';
+                          const isExpired = doc?.status === 'expired';
+                          const needsAction = isRejected || isExpired;
+                          const isPending = doc?.status === 'pending_review';
+                          const isVerified = doc?.status === 'verified';
 
                           return (
                             <div
                               key={item.type}
                               className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
-                                doc ? 'border-green-200 bg-green-50/50' : 'border-slate-200'
+                                needsAction
+                                  ? 'border-red-200 bg-red-50/60'
+                                  : doc
+                                  ? 'border-green-200 bg-green-50/50'
+                                  : 'border-slate-200'
                               }`}
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                {doc ? (
+                                {needsAction ? (
+                                  <X className="w-4 h-4 text-red-600 shrink-0" />
+                                ) : doc ? (
                                   <Check className="w-4 h-4 text-green-600 shrink-0" />
                                 ) : (
                                   <div className="w-4 h-4 rounded-full border-2 border-slate-300 shrink-0" />
                                 )}
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-medium text-slate-700">{item.label}</p>
                                     <span
                                       className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
@@ -301,10 +319,35 @@ export function DocumentChecklistModal({
                                     >
                                       {item.category === 'permanent' ? 'On File' : 'Renew Yearly'}
                                     </span>
+                                    {isRejected && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                                        Rejected — Needs Resubmission
+                                      </span>
+                                    )}
+                                    {isExpired && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                                        Expired — Needs Renewal
+                                      </span>
+                                    )}
+                                    {isPending && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                                        Pending Review
+                                      </span>
+                                    )}
+                                    {isVerified && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
+                                        Verified
+                                      </span>
+                                    )}
                                   </div>
                                   {doc && (
                                     <p className="text-[11px] text-slate-400 truncate max-w-[260px]">
                                       {doc.original_filename}
+                                    </p>
+                                  )}
+                                  {isRejected && doc?.rejection_reason && (
+                                    <p className="text-[11px] text-red-600 mt-0.5 max-w-[280px]">
+                                      Reason: {doc.rejection_reason}
                                     </p>
                                   )}
                                 </div>
@@ -328,10 +371,15 @@ export function DocumentChecklistModal({
                                         <button
                                           type="button"
                                           onClick={() => fileInputRefs.current[item.type]?.click()}
-                                          title="Replace file"
-                                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 active:scale-90 rounded transition-[color,background-color,transform]"
+                                          title={needsAction ? 'Resubmit file' : 'Replace file'}
+                                          className={
+                                            needsAction
+                                              ? 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-700 bg-red-100 hover:bg-red-200 active:scale-[0.97] rounded-lg transition-[background-color,transform]'
+                                              : 'p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 active:scale-90 rounded transition-[color,background-color,transform]'
+                                          }
                                         >
                                           <Upload className="w-4 h-4" />
+                                          {needsAction && <span>Resubmit</span>}
                                         </button>
                                         <button
                                           type="button"
