@@ -14,15 +14,16 @@ interface AuthState {
   initialize: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (
-    email: string, 
-    password: string, 
-    fullName: string,
-    phone: string,
-    dob: string,
-    gender: string,
-    school: string,
-    sport: string
-  ) => Promise<{ error: string | null }>;
+  email: string, 
+  password: string, 
+  fullName: string,
+  phone: string,
+  dob: string,
+  gender: string,
+  school: string,
+  sport: string,
+  role: UserRole
+) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -132,36 +133,37 @@ sendAthleteOtp: async (email: string) => {
     });
   },
 
-  signUp: async (email, password, fullName, phone, dob, gender, school, sport) => {
-    set({ isLoading: true });
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            phone: phone,
-            dob: dob,
-            gender: gender,
-            school: school,
-            sport: sport,
-          },
+signUp: async (email, password, fullName, phone, dob, gender, school, sport, role) => {
+  set({ isLoading: true });
+  try {
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          phone: phone,
+          dob: dob,
+          gender: gender,
+          school: school,
+          sport: sport,
+          role: role,
         },
-      });
+      },
+    });
 
-      if (error) {
-        set({ isLoading: false });
-        return { error: error.message };
-      }
-      
+    if (error) {
       set({ isLoading: false });
-      return { error: null };
-    } catch (err) {
-       set({ isLoading: false });
-       return { error: 'An unexpected error occurred during sign up.' };
+      return { error: error.message };
     }
-  },
+    
+    set({ isLoading: false });
+    return { error: null };
+  } catch (err) {
+     set({ isLoading: false });
+     return { error: 'An unexpected error occurred during sign up.' };
+  }
+},
   signIn: async (email: string, password: string) => {
     const trimmedEmail = email.trim();
     const { data, error } = await supabase.auth.signInWithPassword({

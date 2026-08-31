@@ -318,21 +318,30 @@ export default function LandingPage() {
       <main>
         <section id="home" className="relative overflow-hidden pt-14 pb-24 md:pt-0 md:pb-0 scroll-mt-24">
           
-          {/* Full-bleed athlete photo as a right-side background — not a card */}
-          <div className="hidden md:flex absolute inset-y-0 right-0 w-1/2 items-center justify-center">
-            <img
-              src={HeroAthletes}
-              alt="ILOPRISAA student-athletes competing in track, basketball, volleyball, and swimming"
-              className="w-full h-full object-contain object-top"
-              // ADDED: CSS Mask to fade out the bottom 30% of the image
-              style={{
-                WebkitMaskImage: 'linear-gradient(to bottom, black 70%, transparent 85%)',
-                maskImage: 'linear-gradient(to bottom, black 70%, transparent 85%)'
-              }}
-            />
-            
-            <div className="absolute bottom-18 right-20">
-              <CredentialBadge />
+          {/* Full-bleed athlete photo as a right-side background — not a card.
+              Only kicks in at lg+, where the larger heading size gives the
+              section enough height for this full-bleed technique to read
+              correctly. Below that, the grid-column image block below does
+              the job at a size that matches its own container instead. */}
+          <div className="hidden lg:flex absolute inset-y-0 right-0 w-1/2 items-center justify-end">
+            <div className="relative">
+              <img
+                src={HeroAthletes}
+                alt="ILOPRISAA student-athletes competing in track, basketball, volleyball, and swimming"
+                className="max-w-full max-h-full w-auto h-auto object-contain"
+                style={{
+                  WebkitMaskImage: 'linear-gradient(to bottom, black 70%, transparent 85%)',
+                  maskImage: 'linear-gradient(to bottom, black 70%, transparent 85%)'
+                }}
+              />
+
+              {/* Image itself stays flush at the container's right edge
+                  (no margin). Only the badge's own right-15 reaches past
+                  the image's edge back to the header's 60px inset (px-15),
+                  so it lines up with Sign In without moving the photo. */}
+              <div className="absolute bottom-4 right-15">
+                <CredentialBadge />
+              </div>
             </div>
           </div>
 
@@ -382,19 +391,27 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Spacer column — reserves space so text doesn't sit over the background photo */}
-            <div aria-hidden="true" className="hidden md:block" />
-          </div>
-
-          {/* Mobile-only: image still shows below the text, as a normal (non-card) full-width image */}
-          <div className="md:hidden mt-10 relative">
-            <img
-              src={HeroAthletes}
-              alt="ILOPRISAA student-athletes competing in track, basketball, volleyball, and swimming"
-              className="w-full h-auto"
-            />
-          <div className="absolute bottom-4 right-4">             
-            <CredentialBadge />
+            {/* Image participates in normal grid flow from mobile through
+                tablet: stacks below the text at a single column, sits
+                beside it once md:grid-cols-2 kicks in. Badge is anchored to
+                THIS wrapper (sized to the image itself), not to the
+                section's height, so it can't end up floating disconnected
+                from the photo the way a height-mismatched absolute overlay
+                can. Hidden at lg+, where the full-bleed background photo
+                above takes over instead. */}
+            <div className="relative mt-10 md:mt-0 lg:hidden">
+              <img
+                src={HeroAthletes}
+                alt="ILOPRISAA student-athletes competing in track, basketball, volleyball, and swimming"
+                className="w-full h-auto"
+                style={{
+                  WebkitMaskImage: 'linear-gradient(to bottom, black 70%, transparent 85%)',
+                  maskImage: 'linear-gradient(to bottom, black 70%, transparent 85%)'
+                }}
+              />
+              <div className="absolute bottom-4 right-4">
+                <CredentialBadge />
+              </div>
             </div>
           </div>
         </section>

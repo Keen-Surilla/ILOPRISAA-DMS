@@ -44,41 +44,46 @@ export default function SignUpPage() {
   const { signUp, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
+ const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  setError(null);
 
-    if (!agreeTerms) {
-      setError("You must agree to the Terms of Service and Privacy Policy.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
+  if (!selectedRole) {
+    setError("Please select a role before continuing.");
+    return;
+  }
+  if (!agreeTerms) {
+    setError("You must agree to the Terms of Service and Privacy Policy.");
+    return;
+  }
+  if (password !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
+  if (password.length < 8) {
+    setError("Password must be at least 8 characters long.");
+    return;
+  }
 
-    const result = await signUp(
-      email, 
-      password, 
-      fullName, 
-      phone, 
-      dob, 
-      gender, 
-      school, 
-      sport
-    );
-    
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    
-    setSuccess(true);
-  };
+  const result = await signUp(
+    email, 
+    password, 
+    fullName, 
+    phone, 
+    dob, 
+    gender, 
+    school, 
+    sport,
+    selectedRole
+  );
+  
+  if (result.error) {
+    setError(result.error);
+    return;
+  }
+  
+  setSuccess(true);
+};
 
   if (success) {
     return (

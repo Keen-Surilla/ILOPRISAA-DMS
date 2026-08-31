@@ -13,11 +13,14 @@ const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashb
 const AthleteLogin = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteLogin'));
 const AthleteDashboard = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteDashboard'));
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
+const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/AdminDashboard'));
+const SuperAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SuperAdminDashboard'));
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
   if (role === 'coach') return <Navigate to="/coach/dashboard" replace />;
   if (role === 'admin') return <Navigate to="/admin" replace />;
+  if (role === 'super_admin') return <Navigate to="/super-admin" replace />;
   if (role === 'committee') return <Navigate to="/committee" replace />;
   if (role === 'athlete') return <Navigate to="/athlete/dashboard" replace />;
   return <Navigate to="/login" replace />;
@@ -56,18 +59,8 @@ useEffect(() => {
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/athlete-login" element={<AthleteLogin />} />
             <Route path="/athlete/dashboard" element={<AthleteDashboard />} />
-            
-            {/* 
-              ADDED THIS: The Protected Route for the Athlete Dashboard
-              <Route
-                path="/athlete/*"
-                element={
-                  <ProtectedRoute allowedRoles={['athlete']}>
-                    <AthleteDashboard />
-                  </ProtectedRoute>
-                }
-              /> 
-            */} 
+            <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/super-admin/*" element={<ProtectedRoute allowedRoles={['super_admin']}><SuperAdminDashboard /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />
             <Route path="/committee/*" element={<ProtectedRoute allowedRoles={['committee']}><CommitteeDashboard /></ProtectedRoute>} />   
             <Route path="*" element={<Navigate to="/" replace />} />
