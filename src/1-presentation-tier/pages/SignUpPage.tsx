@@ -8,7 +8,7 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   ArrowRight,
-  UserCheck
+  // UserCheck //
 } from 'lucide-react';
 import { PhilippinePhoneInput } from '../../1-presentation-tier/components/ui/PhilippinePhoneInput';
 import { SexOption } from '../components/ui/SexOption';
@@ -65,25 +65,25 @@ export default function SignUpPage() {
     return;
   }
 
-  const result = await signUp(
-    email, 
-    password, 
-    fullName, 
-    phone, 
-    dob, 
-    gender, 
-    school, 
-    sport,
-    selectedRole
-  );
-  
-  if (result.error) {
-    setError(result.error);
-    return;
-  }
-  
-  setSuccess(true);
-};
+    const result = await signUp(
+      email, 
+      password, 
+      fullName, 
+      phone, 
+      dob, 
+      gender, 
+      school, 
+      sport,
+      selectedRole!
+    );
+    
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    
+    setSuccess(true);
+  };
 
   if (success) {
     return (
@@ -273,9 +273,10 @@ export default function SignUpPage() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1 ml-1">Date of Birth</label>
+                        <label htmlFor="dob" className="block text-xs font-bold text-slate-700 mb-1 ml-1">Date of Birth</label>
                         <input 
                           type="date" 
+                          id ="dob"
                           required 
                           value={dob} 
                           onChange={(e) => setDob(e.target.value)} 

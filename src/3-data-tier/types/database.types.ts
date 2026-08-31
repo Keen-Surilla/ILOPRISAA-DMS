@@ -362,12 +362,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_invite: { Args: { p_token: string }; Returns: undefined }
       calculate_prisaa_age: {
         Args: { dob: string; event_year: number }
         Returns: number
       }
       cleanup_expired_events: { Args: never; Returns: undefined }
       expire_stale_annual_documents: { Args: never; Returns: undefined }
+      get_invite_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          email: string
+          expires_at: string
+          institution_id: string
+          role: Database["public"]["Enums"]["user_role"]
+          status: Database["public"]["Enums"]["invite_status"]
+        }[]
+      }
       get_my_role: { Args: never; Returns: string }
       link_athlete_account: { Args: never; Returns: undefined }
       my_coach_id: { Args: never; Returns: string }
@@ -375,6 +386,7 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      revoke_invite: { Args: { p_invite_id: string }; Returns: undefined }
       run_daily_archival: { Args: never; Returns: undefined }
     }
     Enums: {

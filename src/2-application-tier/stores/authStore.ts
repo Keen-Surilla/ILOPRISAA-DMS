@@ -12,18 +12,18 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   initialize: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; role?: string | null }>;
   signUp: (
-  email: string, 
-  password: string, 
-  fullName: string,
-  phone: string,
-  dob: string,
-  gender: string,
-  school: string,
-  sport: string,
-  role: UserRole
-) => Promise<{ error: string | null }>;
+    email: string, 
+    password: string, 
+    fullName: string,
+    phone: string,
+    dob: string,
+    gender: string,
+    school: string,
+    sport: string,
+    role: string
+  ) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -133,24 +133,24 @@ sendAthleteOtp: async (email: string) => {
     });
   },
 
-signUp: async (email, password, fullName, phone, dob, gender, school, sport, role) => {
-  set({ isLoading: true });
-  try {
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          phone: phone,
-          dob: dob,
-          gender: gender,
-          school: school,
-          sport: sport,
-          role: role,
+  signUp: async (email, password, fullName, phone, dob, gender, school, sport, role) => {
+    set({ isLoading: true });
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            phone: phone,
+            dob: dob,
+            gender: gender,
+            school: school,
+            sport: sport,
+            role: role,
+          },
         },
-      },
-    });
+      });
 
     if (error) {
       set({ isLoading: false });
@@ -182,7 +182,7 @@ signUp: async (email, password, fullName, phone, dob, gender, school, sport, rol
     }
 
     set({ user: profile, role: profile.role, isAuthenticated: true, isLoading: false });
-    return { error: null };
+    return { error: null, role: profile.role };
   },
 
   signOut: async () => {

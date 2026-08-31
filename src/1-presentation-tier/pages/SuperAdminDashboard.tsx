@@ -2,6 +2,7 @@
 import { Bell } from 'lucide-react';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { PortalShell } from '../components/layout/PortalShell';
+import { InviteUsersPanel } from '../components/invites/InviteUsersPanel';
 
 export default function SuperAdminDashboard() {
   const { user } = useAuthStore();
@@ -38,6 +39,12 @@ export default function SuperAdminDashboard() {
         </div>
 
         <div className="max-w-7xl mx-auto px-8 pb-8">
+          <InviteUsersPanel
+  roleOptions={[
+    { value: 'admin', label: 'School Admin' },
+    { value: 'committee', label: 'Eligibility Committee' },
+  ]}
+/>
           <div className="p-8 text-center text-sm text-slate-400 border border-dashed border-slate-300 rounded-xl">
             Super Admin dashboard — placeholder. Invite management UI goes here (Day 3–4).
           </div>

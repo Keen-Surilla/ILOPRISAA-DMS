@@ -29,10 +29,11 @@ interface PortalShellProps {
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  athlete: 'Athlete Portal',
+  super_admin: 'Admin Portal',
+  admin: 'School Admin Portal',
   coach: 'Coach Portal',
-  admin: 'Admin Portal',
   committee: 'Committee Portal',
+  athlete: 'Athlete Portal',
 };
 
 export function PortalShell({ portalTitle, navGroups = [], children }: PortalShellProps) {

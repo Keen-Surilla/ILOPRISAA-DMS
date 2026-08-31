@@ -15,6 +15,7 @@ const AthleteDashboard = lazy(() => import('./1-presentation-tier/pages/athlete/
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
 const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/AdminDashboard'));
 const SuperAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SuperAdminDashboard'));
+const AcceptInvitePage = lazy(() => import('./1-presentation-tier/pages/AcceptInvitePage'));
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
@@ -46,7 +47,7 @@ useEffect(() => {
       window.removeEventListener('focus', handleWindowFocus);
     };
 
-  }, []);
+  }, [initialize, signOut]);
 
   return (
     <SecureErrorBoundary fallbackTitle="Server Connection Error">
@@ -59,6 +60,7 @@ useEffect(() => {
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/athlete-login" element={<AthleteLogin />} />
             <Route path="/athlete/dashboard" element={<AthleteDashboard />} />
+            <Route path="/accept-invite" element={<AcceptInvitePage />} />
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/super-admin/*" element={<ProtectedRoute allowedRoles={['super_admin']}><SuperAdminDashboard /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />

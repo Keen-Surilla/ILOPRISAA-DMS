@@ -17,9 +17,12 @@ serve(async (req) => {
   }
 
   try {
-    const { token } = await req.json();
+    const bodyText = await req.text();
+    const body = JSON.parse(bodyText);
+    const { token } = body;
+
     if (!token) {
-      return new Response(JSON.stringify({ error: "Missing token" }), {
+      return new Response(JSON.stringify({ error: "Missing token parameter" }), {
         status: 400,
         headers: corsHeaders,
       });
@@ -27,12 +30,20 @@ serve(async (req) => {
 
     // Scoped to the CALLER's own JWT — used only to confirm who is calling,
     // never for the privileged action below.
-    const authHeader = req.headers.get("Authorization") ?? "";
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
     const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: userError } = await callerClient.auth.getUser();
     if (userError || !user) {
+      console.error("Auth error:", userError);
       return new Response(JSON.stringify({ error: "Not authenticated" }), {
         status: 401,
         headers: corsHeaders,
@@ -50,6 +61,7 @@ serve(async (req) => {
       .single();
 
     if (inviteError || !invite) {
+      console.error("Invite lookup error:", inviteError);
       return new Response(JSON.stringify({ error: "Invite not found" }), {
         status: 404,
         headers: corsHeaders,
@@ -86,7 +98,8 @@ serve(async (req) => {
     });
 
     if (sendError) {
-      return new Response(JSON.stringify({ error: sendError.message }), {
+      console.error("Email send error:", sendError);
+      return new Response(JSON.stringify({ error: `Failed to send email: ${sendError.message}` }), {
         status: 500,
         headers: corsHeaders,
       });
@@ -97,7 +110,14 @@ serve(async (req) => {
       headers: corsHeaders,
     });
   } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    console.error("Send invite email error:", errorMessage);
     return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: corsHeaders }
+    );
+  }
+});
       JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
       { status: 500, headers: corsHeaders }
     );
