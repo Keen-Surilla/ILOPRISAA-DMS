@@ -82,7 +82,7 @@ export default function AcceptInvitePage() {
     };
   }, [token]);
 
-  const handleSubmit = async (e: FormEvent) => {
+const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -112,16 +112,21 @@ export default function AcceptInvitePage() {
         }
       }
 
-      await initialize();
+      // 1. Sign out of the temporary magic link session
+      await supabase.auth.signOut();
+      
       setPageState('success');
-      navigate('/home', { replace: true });
+      
+      // 2. Redirect to the login page instead of home
+      navigate('/login', { replace: true });
+      
     } catch (err: any) {
       setError(err?.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
-
+  
   if (pageState === 'loading') {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
