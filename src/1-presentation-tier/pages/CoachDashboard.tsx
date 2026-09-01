@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, Suspense, lazy } from 'react';
-import { Calendar, Users, LayoutDashboard, Settings, Clock, ClipboardCheck, Bell, CheckCircle2, UserCircle, AlertCircle, ArrowRight, FileText, CheckSquare, Archive } from 'lucide-react';
+import { Calendar, Users, LayoutDashboard, Settings, Clock, ClipboardCheck, Bell, CheckCircle2, UserCircle, AlertCircle, ArrowRight, FileText, Archive } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { teamApi } from '../../3-data-tier/api/teamApi';

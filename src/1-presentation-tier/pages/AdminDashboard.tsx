@@ -70,7 +70,7 @@ export default function SuperAdminDashboard() {
 
               <InviteUsersPanel
                 roleOptions={[
-                  { value: 'admin', label: 'School Admin' },
+                  { value: 'school_admin', label: 'School Admin' },
                   { value: 'committee', label: 'Eligibility Committee' },
                 ]}
               />

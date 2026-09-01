@@ -35,18 +35,65 @@ export async function createInvite(
 
 // Separate from createInvite so email failures don't rollback the invite record
 export async function sendInviteEmail(token: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke('send-invite-email', {
-    body: { token },
-  });
+  try {
+    const response = await supabase.functions.invoke('send-invite-email', {
+      body: { token },
+    });
 
-  if (error) {
-    console.error('Error sending invite email:', error);
-    throw new Error('Invite was created, but the email could not be sent. Please try resending it.');
-  }
+    // Extract error details from response
+    const { data, error } = response;
 
-  if (data?.error) {
-    console.error('send-invite-email returned an error:', data.error);
-    throw new Error(data.error);
+    if (error) {
+      console.error('Error invoking send-invite-email function:', error);
+      
+      // Try to get more details from the error
+      let errorDetails = error instanceof Error ? error.message : JSON.stringify(error);
+      
+      // If error has a context property with body, try to parse it
+      if ((error as any)?.context?.body) {
+        try {
+          const bodyText = (error as any).context.body;
+          const parsedBody = typeof bodyText === 'string' ? JSON.parse(bodyText) : bodyText;
+          if (parsedBody?.error) {
+            errorDetails = parsedBody.error;
+          }
+        } catch (parseErr) {
+          // Fallback to original error
+        }
+      }
+      
+      throw new Error(`Email service error: ${errorDetails}`);
+    }
+
+    // supabase-js only auto-parses the body when the function response has
+    // Content-Type: application/json. If that header is missing, `data`
+    // arrives here as a raw string even though the function itself succeeded.
+    let parsed = data;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (parseErr) {
+        console.error('send-invite-email returned a non-JSON string body:', parsed);
+        throw new Error('Email service returned a malformed response');
+      }
+    }
+
+    if (parsed?.error) {
+      console.error('send-invite-email returned an error:', parsed.error);
+      throw new Error(parsed.error);
+    }
+
+    if (!parsed?.success) {
+      console.error('send-invite-email returned unexpected response:', parsed);
+      throw new Error('Email service returned an unexpected response');
+    }
+  } catch (err) {
+    console.error('Failed to send invite email:', err);
+    throw new Error(
+      err instanceof Error 
+        ? `Invite was created, but the email could not be sent: ${err.message}`
+        : 'Invite was created, but the email could not be sent.'
+    );
   }
 }
 

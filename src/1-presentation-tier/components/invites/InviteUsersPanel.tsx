@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from 'react';
-import { Mail, XCircle, Clock, CheckCircle2, Ban } from 'lucide-react';
+import { Mail, XCircle, Clock, CheckCircle2, Ban, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import {
   createInvite,
@@ -50,6 +50,7 @@ export function InviteUsersPanel({ roleOptions, useOwnInstitution }: InviteUsers
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isEmailPending, setIsEmailPending] = useState(false);
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [isLoadingInvites, setIsLoadingInvites] = useState(true);
   const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -89,14 +90,32 @@ export function InviteUsersPanel({ roleOptions, useOwnInstitution }: InviteUsers
 
     setIsSubmitting(true);
     try {
+      // DB insert only — this is the part worth waiting on.
       const invite = await createInvite(email, selectedRole, user.id, institutionId);
-      await sendInviteEmail(invite.token);
-      setSuccess(`Invite sent to ${email}.`);
       setEmail('');
       await refreshInvites();
+      setIsSubmitting(false); // unblock the form now; email send happens in the background
+
+      // Email send is in flight; the button spinner reflects this now.
+      setIsEmailPending(true);
+
+      // Fire-and-forget: don't make the user wait on the SMTP round trip.
+      sendInviteEmail(invite.token)
+        .then(() => {
+          setError(null);
+          setSuccess(`Invite sent to ${invite.email}.`);
+        })
+        .catch((err: any) => {
+          console.error(err);
+          setSuccess(null);
+          setError(`Invite for ${invite.email} was created, but the confirmation email failed to send.`);
+        })
+        .finally(() => {
+          setIsEmailPending(false);
+          refreshInvites();
+        });
     } catch (err: any) {
-      setError(err?.message || 'Could not send the invite. Please try again.');
-    } finally {
+      setError(err?.message || 'Could not create the invite. Please try again.');
       setIsSubmitting(false);
     }
   };
@@ -162,9 +181,10 @@ export function InviteUsersPanel({ roleOptions, useOwnInstitution }: InviteUsers
           <button
             type="submit"
             disabled={isSubmitting}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-md shadow-blue-600/10 active:scale-[0.99] whitespace-nowrap"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-md shadow-blue-600/10 active:scale-[0.99] whitespace-nowrap flex items-center justify-center gap-2"
           >
-            {isSubmitting ? 'Sending…' : 'Send Invite'}
+            {(isSubmitting || isEmailPending) && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isSubmitting ? 'Creating…' : isEmailPending ? 'Sending email…' : 'Send Invite'}
           </button>
         </form>
       </div>
