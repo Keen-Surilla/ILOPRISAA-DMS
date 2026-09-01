@@ -31,24 +31,34 @@ serve(async (req) => {
     // Verify caller is authenticated with user JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+      console.error("Missing authorization header");
+      return new Response(JSON.stringify({ error: "Missing authorization header. User must be authenticated." }), {
         status: 401,
         headers: corsHeaders,
       });
     }
 
-    const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await callerClient.auth.getUser();
-    if (userError || !user) {
-      console.error("Auth error:", userError);
-      return new Response(JSON.stringify({ error: "Not authenticated" }), {
+    let user;
+    try {
+      const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user: authUser }, error: userError } = await callerClient.auth.getUser();
+      if (userError || !authUser) {
+        console.error("Auth error:", userError);
+        return new Response(JSON.stringify({ error: "Invalid or expired authentication token." }), {
+          status: 401,
+          headers: corsHeaders,
+        });
+      }
+      user = authUser;
+    } catch (authErr) {
+      console.error("Error verifying auth:", authErr);
+      return new Response(JSON.stringify({ error: "Failed to verify authentication." }), {
         status: 401,
         headers: corsHeaders,
       });
     }
-
 
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -60,28 +70,28 @@ serve(async (req) => {
 
     if (inviteError || !invite) {
       console.error("Invite lookup error:", inviteError);
-      return new Response(JSON.stringify({ error: "Invite not found" }), {
+      return new Response(JSON.stringify({ error: "Invite not found or token is invalid." }), {
         status: 404,
         headers: corsHeaders,
       });
     }
 
     if (invite.invited_by !== user.id) {
-      return new Response(JSON.stringify({ error: "You did not create this invite" }), {
+      return new Response(JSON.stringify({ error: "You did not create this invite. Unauthorized." }), {
         status: 403,
         headers: corsHeaders,
       });
     }
 
     if (invite.status !== "pending") {
-      return new Response(JSON.stringify({ error: `Invite is already ${invite.status}` }), {
+      return new Response(JSON.stringify({ error: `Invite is already ${invite.status}. Cannot resend.` }), {
         status: 409,
         headers: corsHeaders,
       });
     }
 
     if (new Date(invite.expires_at) < new Date()) {
-      return new Response(JSON.stringify({ error: "Invite has expired" }), {
+      return new Response(JSON.stringify({ error: "Invite has expired. Cannot resend." }), {
         status: 409,
         headers: corsHeaders,
       });
@@ -103,20 +113,16 @@ serve(async (req) => {
       });
     }
 
+    console.log(`Invite email sent successfully to ${invite.email}`);
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: corsHeaders,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
-    console.error("Send invite email error:", errorMessage);
+    console.error("Send invite email error:", errorMessage, err);
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: corsHeaders }
-    );
-  }
-});
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
       { status: 500, headers: corsHeaders }
     );
   }
