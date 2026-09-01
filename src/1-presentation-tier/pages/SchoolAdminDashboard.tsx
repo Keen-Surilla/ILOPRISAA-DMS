@@ -1,13 +1,16 @@
 // src/1-presentation-tier/pages/AdminDashboard.tsx
 import { useState } from 'react';
-import { Bell, UserPlus, Users } from 'lucide-react';
+import { Bell, UserPlus, Users, Settings } from 'lucide-react'; // 1. Added Settings icon
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { PortalShell } from '../components/layout/PortalShell';
 import { InviteUsersPanel } from '../components/invites/InviteUsersPanel';
+import SchoolAdminSettingsView from '../pages/school-admin-views/SettingsView'; // 2. Import the settings view (update path if needed)
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'invite' | 'manage'>('invite');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // 3. State to open/close settings
+
   const profileName = user?.full_name || user?.email || 'School Admin';
   const profileRole = (user as Record<string, any>)?.role || 'Admin';
 
@@ -31,6 +34,14 @@ export default function AdminDashboard() {
               icon: <Users className="w-5 h-5" />,
               active: activeTab === 'manage',
               onClick: () => setActiveTab('manage'),
+            },
+            // 4. Added Settings Tab here
+            {
+              id: 'settings',
+              label: 'Settings',
+              icon: <Settings className="w-5 h-5" />,
+              active: false, 
+              onClick: () => setIsSettingsOpen(true),
             },
           ],
         },
@@ -95,6 +106,11 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* 5. Render Settings Modal when open */}
+      {isSettingsOpen && (
+        <SchoolAdminSettingsView onClose={() => setIsSettingsOpen(false)} />
+      )}
     </PortalShell>
   );
 }

@@ -25,16 +25,22 @@ export async function getProfile(userId: string): Promise<CoachProfile | null> {
   return data as any;
 }
 
-export async function updateProfile(userId: string, payload: Partial<CoachProfile>) {
-  const { data, error } = await supabase
-    .from('profiles' as any)
-    .update(payload)
+export const updateProfile = async (userId: string, data: any) => {
+  const { data: updatedData, error } = await supabase
+    .from('profiles')
+    .update(data)
     .eq('id', userId)
-    .select()
-    .single();
+    .select() // <-- IMPORTANT: Ask Supabase to return the updated row
+    .single(); // <-- IMPORTANT: Ensure exactly one row is returned
 
   if (error) {
-    throw new Error(error.message || 'Failed to update profile');
+    throw new Error(error.message);
   }
-  return data;
-}
+
+  // If RLS blocked it, it will return null/empty data without throwing a DB error
+  if (!updatedData) {
+    throw new Error("Update blocked by Database Security (RLS) or user not found.");
+  }
+
+  return updatedData;
+};

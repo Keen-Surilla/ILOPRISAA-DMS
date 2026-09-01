@@ -71,7 +71,7 @@ export function InviteUsersPanel({ roleOptions, useOwnInstitution }: InviteUsers
     refreshInvites();
   }, []);
 
-  const handleSubmit = async (e: FormEvent) => {
+ const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
@@ -84,36 +84,39 @@ export function InviteUsersPanel({ roleOptions, useOwnInstitution }: InviteUsers
     const institutionId = useOwnInstitution ? (user as any)?.institution_id ?? null : null;
 
     if (useOwnInstitution && !institutionId) {
-      setError('Your account has no school assigned, so a coach invite cannot be scoped correctly. Contact a super admin.');
+      setError('Your account has no school assigned. Contact a super admin.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // DB insert only — this is the part worth waiting on.
+      // 1. Create the DB record first
       const invite = await createInvite(email, selectedRole, user.id, institutionId);
-      setEmail('');
-      await refreshInvites();
-      setIsSubmitting(false); // unblock the form now; email send happens in the background
-
-      // Email send is in flight; the button spinner reflects this now.
+      
+      setIsSubmitting(false);
       setIsEmailPending(true);
 
-      // Fire-and-forget: don't make the user wait on the SMTP round trip.
-      sendInviteEmail(invite.token)
-        .then(() => {
-          setError(null);
-          setSuccess(`Invite sent to ${invite.email}.`);
-        })
-        .catch((err: any) => {
-          console.error(err);
-          setSuccess(null);
-          setError(`Invite for ${invite.email} was created, but the confirmation email failed to send.`);
-        })
-        .finally(() => {
-          setIsEmailPending(false);
-          refreshInvites();
-        });
+      try {
+        // 2. Wait for the email to send 
+        await sendInviteEmail(invite.token);
+        
+        setError(null);
+        setSuccess(`Invite sent to ${invite.email}.`);
+        setEmail('');
+      } catch (emailErr: any) {
+        console.error("Email send failed:", emailErr);
+        
+        // 3. IMPORTANT: If the email fails (user exists), immediately delete/revoke the invite
+        await revokeInvite(invite.id);
+        
+        setSuccess(null);
+        // Display a clean error to the user
+        setError('Cannot send invite: This email is already registered to an existing account.');
+      } finally {
+        setIsEmailPending(false);
+        await refreshInvites();
+      }
+
     } catch (err: any) {
       setError(err?.message || 'Could not create the invite. Please try again.');
       setIsSubmitting(false);
