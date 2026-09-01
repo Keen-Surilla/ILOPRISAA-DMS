@@ -48,16 +48,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Not logged in at all — this is the sign-out / session-expired case.
-  // Redirect declaratively instead of rendering a page: a <Navigate> swaps
-  // the route within the same render, so there's no "Access Denied" frame
-  // to flash while whatever else is triggering the redirect catches up.
+  // User not logged in — redirect to login
   if (!isAuthenticated) {
     return fallback ? <>{fallback}</> : <Navigate to="/login" replace />;
   }
 
-  // Logged in, but not permitted on this route — this IS a real access
-  // problem worth telling the user about, so it still gets the page.
+  // Logged in but lacks permission
   if (!role || !allowedRoles.includes(role)) {
     return fallback ? (
       <>{fallback}</>

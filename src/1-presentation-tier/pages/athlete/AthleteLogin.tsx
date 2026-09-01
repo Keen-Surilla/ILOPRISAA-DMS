@@ -15,8 +15,7 @@ export default function AthleteGuesztLogin() {
   const [step, setStep] = useState<'email' | 'otp'>('email');
   const [email, setEmail] = useState('');
 
-  // 6 digits — this project's Supabase Auth is configured for 6-digit
-  // email OTPs, confirmed by what's actually arriving in the inbox.
+  // 6-digit OTP configured in Supabase Auth
   const [pinArray, setPinArray] = useState(Array(6).fill(''));
   const [pinShake, setPinShake] = useState(false);
 
@@ -34,29 +33,25 @@ export default function AthleteGuesztLogin() {
   }, [resendCooldown]);
 
   useEffect(() => {
-    // 1. Grab the token from the URL
+    // Parse coach link from invite token in URL
     const inviteToken = searchParams.get('invite');
 
     if (inviteToken) {
       try {
-        // 2. Unscramble the token back into readable data
         const decodedData = JSON.parse(atob(inviteToken));
 
-        // 3. Check if the current time is PAST the expiration time
         if (Date.now() > decodedData.exp) {
           setIsLinkExpired(true);
         } else {
-          // Link is valid! You can save the coachId to link them to this specific coach
           setCoachId(decodedData.coachId);
         }
       } catch (error) {
-        // If they mess with the token in the URL, it will fail to unscramble and instantly expire
         setIsLinkExpired(true);
       }
     }
   }, [searchParams]);
 
-  // 4. The "Link Expired" Error UI
+  // Expired invite UI
   if (isLinkExpired) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">

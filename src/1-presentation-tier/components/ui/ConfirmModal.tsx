@@ -36,8 +36,7 @@ export function ConfirmModal({
       setIsClosing(false);
       return;
     }
-    // isOpen just went false — if we were showing, play the exit
-    // animation before actually unmounting instead of vanishing instantly.
+    // Play exit animation before unmounting
     if (shouldRender) {
       setIsClosing(true);
       const timeout = setTimeout(() => {

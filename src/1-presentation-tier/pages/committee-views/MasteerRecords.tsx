@@ -39,9 +39,7 @@ export default function MasterRecords() {
     queryFn: getAllDocumentRecords,
   });
 
-  // Only list schools that actually have documents right now, using the
-  // canonical name resolved in recordsApi.ts. Unmatched/legacy institution_id
-  // values fall under "Unassigned" rather than being silently dropped.
+  // List schools with documents; unmatched institutions go to "Unassigned"
   const schoolOptions = useMemo(() => {
     const byId = new Map<string, string>();
     let hasUnassigned = false;

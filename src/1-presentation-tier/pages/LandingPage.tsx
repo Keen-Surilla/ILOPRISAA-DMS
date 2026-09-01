@@ -11,14 +11,10 @@ import {
   CheckCircle2,
   Eye,
 } from 'lucide-react';
-import Logo2 from '../../assets/Logo2.svg'; // Using your brand assets
+import Logo2 from '../../assets/Logo2.svg';
 import HeroAthletes from '../../assets/hero-athletes.png';
 
-// Brand colors as explicit hex values (not Tailwind theme keys).
-// Your package.json is on Tailwind v4, which does not read the legacy
-// tailwind.config.js theme.extend block used here, so bg-brand-blue /
-// text-brand-navy etc. were silently generating no CSS -> invisible
-// button text. Using bracket-value classes sidesteps that entirely.
+// Using bracket-value Tailwind classes for Tailwind v4 compatibility
 const NAVY = '#1E3A8A';
 const BLUE = '#2563EB';
 const SUCCESS = '#10B981';
@@ -30,11 +26,7 @@ const NAV_LINKS = [
   { id: 'security', label: 'Security' },
 ] as const;
 
-// ─────────────────────────────────────────────────────────
-// Signature element: a live snapshot of the document pipeline,
-// using the same status colors as DocumentComponents in the app.
-// Sits docked to the bottom edge of the hero photo.
-// ─────────────────────────────────────────────────────────
+// Live document status animation showing credential pipeline
 const CREDENTIAL_STATES = [
   { label: 'Draft', sub: 'Awaiting submission', color: '#6B7280', bg: '#F3F4F6', ring: '#E5E7EB' },
   { label: 'Pending review', sub: 'With your coach', color: '#B45309', bg: '#FEF3C7', ring: '#FDE68A' },
@@ -128,11 +120,7 @@ const ROLE_FEATURES = [
   },
 ] as const;
 
-// ─────────────────────────────────────────────────────────
-// Small, real product previews for the features grid — same
-// chip/card vocabulary as CredentialBadge, so the section shows
-// the product instead of describing it with a bare icon.
-// ─────────────────────────────────────────────────────────
+// Feature cards showing product UI samples
 function FeaturePreview({ kind }: { kind: 'athlete' | 'coach' | 'admin' }) {
   if (kind === 'athlete') {
     return (

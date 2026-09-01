@@ -52,8 +52,7 @@ const handleSaveUploaded = async () => {
     await onSave(cleanedBlob);
   } catch (err) {
     console.error('Background removal failed:', err);
-    // Fall back to the original file if processing fails, rather than
-    // blocking the coach from saving a signature at all.
+    // Fall back to original file if processing fails
     await onSave(uploadedFile);
   } finally {
     setIsProcessing(false);

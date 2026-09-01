@@ -25,8 +25,7 @@ interface EventCalendarProps {
   onEdit?: (event: CalendarEventRow) => void;
 }
 
-// Pure function, doesn't touch component state/props — pulled out of the
-// component body so it isn't re-created as a new closure on every render.
+// Memoized styling helper to avoid closure recreation
 function getEventStyle(ev: CalendarEventRow): string {
   if (ev.status === 'Completed') return 'bg-green-100 text-green-800 border-green-200';
   if (ev.type === 'meeting') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
@@ -50,8 +49,6 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
 
   const { minYear, maxYear } = getCalendarYearBounds();
 
-  // Flattening a memoized 6x7 grid is cheap, but folding it into the same
-  // memo avoids a second array allocation on every render.
   const flatDays = useMemo(() => buildMonthGrid(year, monthIndex).flat(), [year, monthIndex]);
 
   useEffect(() => {
@@ -77,9 +74,6 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
   }, [events]);
 
   const handleEditClick = useCallback((ev: CalendarEventRow) => {
-    // Gate edit behind canManage on the client too — even though the
-    // service layer rejects unauthorized writes, we shouldn't invite a
-    // read-only viewer to open an edit form they can't actually submit.
     if (!canManage || !onEdit) return;
     onEdit(ev);
   }, [canManage, onEdit]);

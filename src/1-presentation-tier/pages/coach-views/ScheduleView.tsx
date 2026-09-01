@@ -89,9 +89,7 @@ export default function ScheduleView() {
         user_id: userId
       };
       if (id) {
-        // Merge onto the existing cached row so fields not present in the
-        // form (timestamps, links, etc.) survive the optimistic update
-        // instead of being wiped until the refetch lands.
+        // Preserve existing fields during optimistic update
         return old?.map((e: any) => e.id === id ? { ...e, ...patch } : e);
       } else {
         return [...(old || []), { id: `temp-${Date.now()}`, ...patch }];

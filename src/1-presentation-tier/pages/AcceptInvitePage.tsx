@@ -16,8 +16,8 @@ type InviteInfo = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: 'School Admin',
-  super_admin: 'Super Admin',
+  school_admin: 'School Admin',
+  admin: 'Admin',
   committee: 'Eligibility Committee',
   coach: 'Coach',
 };
@@ -97,9 +97,7 @@ export default function AcceptInvitePage() {
 
     setIsSubmitting(true);
     try {
-      // The magic link from the invite email already created a session for
-      // this browser (Supabase parses it from the URL automatically). We're
-      // just setting a real password on that already-authenticated account.
+      // Magic link already created session; set password on authenticated account
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         setError(updateError.message);

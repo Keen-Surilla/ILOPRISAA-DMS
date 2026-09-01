@@ -10,7 +10,5 @@ export type CoachProfile = Database['public']['Tables']['coach_profiles']['Row']
 
 export type Invite = Database['public']['Tables']['invites']['Row'];
 export type InviteStatus = Database['public']['Enums']['invite_status'];
-// Athletes are never invited via this flow (they're added to a roster by
-// their coach, per the athlete-doesn't-self-register rule) — narrowed from
-// the full user_role enum so InviteRole can't accidentally include 'athlete'.
+// Athletes cannot be invited; they're added to rosters by coaches
 export type InviteRole = Exclude<UserRole, 'athlete'>;

@@ -36,7 +36,7 @@ CREATE POLICY "profiles: users read own row"
   FOR SELECT
   USING (id = auth.uid());
 
--- Admins can read all profiles (needed for management views).
+-- Admins (top-level) can read all profiles (needed for management views).
 CREATE POLICY "profiles: admins read all"
   ON public.profiles
   FOR SELECT
@@ -208,7 +208,37 @@ CREATE POLICY "storage: admins full access"
   );
 
 
--- ── 6. PROFILE AUTO-CREATION TRIGGER ────────────────────────
+-- ── 6. INVITES TABLE ───────────────────────────────────────
+
+ALTER TABLE public.invites ENABLE ROW LEVEL SECURITY;
+
+-- Users can see invites they created (invited_by = auth.uid()).
+CREATE POLICY "invites: users see own sent invites"
+  ON public.invites
+  FOR SELECT
+  USING (invited_by = auth.uid());
+
+-- Admins (top-level) can see all invites.
+CREATE POLICY "invites: admins see all"
+  ON public.invites
+  FOR SELECT
+  USING (public.get_my_role() = 'admin');
+
+-- Users can only create invites for themselves.
+CREATE POLICY "invites: users create own"
+  ON public.invites
+  FOR INSERT
+  WITH CHECK (invited_by = auth.uid());
+
+-- Users can only revoke invites they created.
+-- (Actual deletion is handled by the revoke_invite RPC with additional checks.)
+CREATE POLICY "invites: users update own"
+  ON public.invites
+  FOR UPDATE
+  USING (invited_by = auth.uid());
+
+
+-- ── 7. PROFILE AUTO-CREATION TRIGGER ────────────────────────
 -- Creates a profile row when a new user signs up via Supabase Auth.
 -- The role is set by the admin AFTER account creation; users cannot
 -- self-assign a role at signup.

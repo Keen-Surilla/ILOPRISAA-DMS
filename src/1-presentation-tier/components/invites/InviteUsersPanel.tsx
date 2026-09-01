@@ -16,12 +16,9 @@ interface RoleOption {
 }
 
 interface InviteUsersPanelProps {
-  // If there's exactly one option, the role select is hidden and that role
-  // is used automatically (e.g. an admin can only ever invite 'coach').
+  // Single option hides role select; multiple options show dropdown
   roleOptions: RoleOption[];
-  // When true, the invite's institution_id is forced to the current user's
-  // own institution_id (required for admin -> coach invites, enforced also
-  // at the RLS level so this is a UX nicety, not the real security boundary).
+  // Forces invite to use current user's institution (enforced at RLS)
   useOwnInstitution?: boolean;
 }
 
@@ -40,8 +37,8 @@ const STATUS_ICONS: Record<string, ReactElement> = {
 };
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: 'School Admin',
-  super_admin: 'Super Admin',
+  school_admin: 'School Admin',
+  admin: 'Admin',
   committee: 'Eligibility Committee',
   coach: 'Coach',
 };

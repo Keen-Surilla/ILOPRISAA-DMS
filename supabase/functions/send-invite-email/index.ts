@@ -28,8 +28,7 @@ serve(async (req) => {
       });
     }
 
-    // Scoped to the CALLER's own JWT — used only to confirm who is calling,
-    // never for the privileged action below.
+    // Verify caller is authenticated with user JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization header" }), {
@@ -50,8 +49,7 @@ serve(async (req) => {
       });
     }
 
-    // Service-role client — bypasses RLS. Used deliberately, only after the
-    // manual authorization checks below (invited_by must match the caller).
+
     const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const { data: invite, error: inviteError } = await adminClient
