@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
 import { documentsApi, REQUIRED_DOCUMENTS, type DocumentRow } from '../../../3-data-tier/api/documentsApi';
 import { Maximize2, X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -73,7 +73,7 @@ export default function AthleteDocumentsView() {
     setPreviewLoading(true);
     setPreviewUrl(null);
     try {
-      // Bucket is private — always go through a short-lived signed URL.
+      // Use signed URL for private bucket access
       const url = await documentsApi.getSignedUrl(doc.storage_path);
       setPreviewUrl(url);
     } catch (err) {
@@ -88,8 +88,7 @@ export default function AthleteDocumentsView() {
     setPreviewUrl(null);
   };
 
-  // Escape closes the modal, and background scroll is locked while it's open
-  // so the page behind doesn't move under the blur.
+  // Lock background scroll while modal is open
   useEffect(() => {
     if (!previewDoc) return;
     const onKeyDown = (e: KeyboardEvent) => {

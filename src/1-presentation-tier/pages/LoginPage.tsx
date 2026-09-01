@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { validateLoginInput } from '../../2-application-tier/utils/validators/payloadValidators';
 import { Eye, EyeOff, ChevronLeft } from 'lucide-react';
@@ -40,19 +40,12 @@ export default function LoginPage() {
         return;
       }
 
-      // 1. Get the role from your auth result or store. 
-      // (Adjust 'result.user.user_metadata.role' based on how you structured your Supabase metadata)
       const userRole = result.role;
-      
-      // ADD THIS LINE TEMPORARILY:
-      //console.log("THE FETCHED ROLE IS:", userRole)//
 
-      // 2. Route conditionally based on the role
+      // Route based on user role
       if (userRole === 'committee') {
-        // Change '/committee' to whatever your actual route path is for CommitteeDashboard
         navigate('/committee', { replace: true }); 
       } else {
-        // Defaults to coach dashboard
         navigate('/home', { replace: true });
       }
       
@@ -67,7 +60,6 @@ export default function LoginPage() {
     <div className="min-h-screen bg-white flex flex-col font-sans">
       <header className="w-full px-8 py-4 flex justify-between items-center border-b border-slate-100">
         <div className="flex items-center gap-7">
-          {/* Back button added here */}
           <button 
             onClick={() => navigate('/')} 
             className="p-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
@@ -76,16 +68,6 @@ export default function LoginPage() {
             <ChevronLeft className="h-8 w-8" />
           </button>
           <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
-        </div>
-
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-slate-600">Don't have an account?</span>
-          <Link 
-            to="/signup" 
-            className="border border-blue-600 text-blue-600 px-5 py-1.5 rounded-lg font-medium hover:bg-blue-50 transition-colors"
-          >
-            Register
-          </Link>
         </div>
       </header>
 

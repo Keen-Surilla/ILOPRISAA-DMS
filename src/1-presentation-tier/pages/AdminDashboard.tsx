@@ -1,19 +1,19 @@
-// src/1-presentation-tier/pages/AdminDashboard.tsx
+// src/1-presentation-tier/pages/SuperAdminDashboard.tsx
 import { useState } from 'react';
 import { Bell, UserPlus, Users } from 'lucide-react';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { PortalShell } from '../components/layout/PortalShell';
 import { InviteUsersPanel } from '../components/invites/InviteUsersPanel';
 
-export default function AdminDashboard() {
+export default function SuperAdminDashboard() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'invite' | 'manage'>('invite');
-  const profileName = user?.full_name || user?.email || 'School Admin';
-  const profileRole = (user as Record<string, any>)?.role || 'Admin';
+  const profileName = user?.full_name || user?.email || 'Super Admin';
+  const profileRole = (user as Record<string, any>)?.role || 'Super Admin';
 
   return (
     <PortalShell
-      portalTitle="School Admin Portal"
+      portalTitle="Super Admin Portal"
       navGroups={[
         {
           label: null,
@@ -48,7 +48,7 @@ export default function AdminDashboard() {
             </button>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-[#0f172a] rounded-full flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                <span className="text-white font-bold text-sm uppercase">{profileName ? profileName.charAt(0) : 'A'}</span>
+                <span className="text-white font-bold text-sm uppercase">{profileName ? profileName.charAt(0) : 'S'}</span>
               </div>
               <div className="flex flex-col hidden sm:flex">
                 <span className="text-sm font-bold text-slate-800 leading-tight">{profileName}</span>
@@ -64,13 +64,15 @@ export default function AdminDashboard() {
               <header className="mb-6">
                 <h2 className="text-3xl font-bold tracking-tight text-slate-800">Invite Users</h2>
                 <p className="text-slate-500 text-sm mt-1">
-                  Send an invitation to add a coach to your school.
+                  Send an invitation to add a school admin or committee member.
                 </p>
               </header>
 
               <InviteUsersPanel
-                roleOptions={[{ value: 'coach', label: 'Coach' }]}
-                useOwnInstitution
+                roleOptions={[
+                  { value: 'admin', label: 'School Admin' },
+                  { value: 'committee', label: 'Eligibility Committee' },
+                ]}
               />
             </div>
           ) : (
@@ -78,7 +80,7 @@ export default function AdminDashboard() {
               <header className="mb-6">
                 <h2 className="text-3xl font-bold tracking-tight text-slate-800">Manage Accounts</h2>
                 <p className="text-slate-500 text-sm mt-1">
-                  View and manage accounts linked to your school.
+                  View and manage admin and committee accounts across ILOPRISAA.
                 </p>
               </header>
 

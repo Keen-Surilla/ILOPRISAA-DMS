@@ -70,10 +70,7 @@ export function DocumentChecklistModal({
     return map;
   }, [documents]);
 
-  // A slot only counts as "filled" if it's pending_review or verified —
-  // this must exactly match the status list in getDocumentCountsForAthletes()
-  // in documentsApi.ts. action_required (rejected) and expired documents both
-  // need resubmission, so neither should count toward completion.
+  // Counts verified/pending documents only (action_required and expired need resubmission)
   const isSlotFilled = (doc: DocumentRow | undefined) =>
     doc?.status === 'verified' || doc?.status === 'pending_review';
 

@@ -183,7 +183,7 @@ const filteredAthletes = useMemo(() => {
 }, [athletes, divisionFilter]);
 
 
-    // Add this inside TeamView.tsx so it can read the acronym!
+    // Get team acronym from coach ID
   const getTeamAcronym = (id?: string) => {
     if (!id) return 'TM'; 
     return id.substring(0, 10).toUpperCase(); 
@@ -191,32 +191,19 @@ const filteredAthletes = useMemo(() => {
 
   const [linkCopied, setLinkCopied] = useState(false);
 
- const handleCopyInviteLink = () => {
-    // 1. Calculate the exact time 30 minutes from right now (in milliseconds)
+  const handleCopyInviteLink = () => {
+    // Create 30-minute expiring invite link
     const expirationTime = Date.now() + (30 * 60 * 1000); 
-
-    // 2. Create a small package of data
-    const tokenData = JSON.stringify({
-      // We include the coach ID so you know whose team they belong to!
-      coachId: profile?.id, 
-      exp: expirationTime
-    });
-
-    // 3. Scramble the data into a Base64 string (makes it look like a real security token)
+    const tokenData = JSON.stringify({ coachId: profile?.id, exp: expirationTime });
     const encodedToken = btoa(tokenData);
-
-    // 4. Build the URL with the token attached to the end
     const inviteUrl = `${window.location.origin}/athlete-login?invite=${encodedToken}`;
     
-    // Copy to clipboard
     navigator.clipboard.writeText(inviteUrl);
-    
-    // Show success checkmark
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  // One count-query for the whole roster instead of one per row.
+  // Batch query for all athletes' document counts
   const athleteIds = useMemo(() => athletes.map(a => a.id), [athletes]);
   const { data: documentCounts = {} } = useQuery({
     queryKey: ['documentCounts', currentUserId, athleteIds],
@@ -230,11 +217,9 @@ const filteredAthletes = useMemo(() => {
     : new Date().getFullYear();
 }, [upcomingEvents]);
 
-  // 2. Setup the Add Mutation
   const addAthleteMutation = useMutation({
     mutationFn: (athleteData: any) => teamApi.addAthlete(athleteData),
     onSuccess: () => {
-      // Magically refreshes the athlete list in the background!
       queryClient.invalidateQueries({ queryKey: ['teamMembers', currentUserId] });
       setIsModalOpen(false);
       setNewAthlete({ name: '', email: '', division: '', date_of_birth: '' });

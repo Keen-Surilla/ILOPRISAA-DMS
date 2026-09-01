@@ -266,7 +266,7 @@ const { data: athletes = [], isLoading: isLoadingAthletes } = useQuery({
 
 
 export default function CoachDashboard() {
-  const { role, user, signOut } = useAuthStore();
+  const { role, user } = useAuthStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('coachDashboardTab') || 'dashboard');
   
@@ -278,9 +278,8 @@ export default function CoachDashboard() {
   const profileName = user?.full_name || user?.email || 'Coach Profile';
   const profileSport = (user as Record<string, any>)?.sport || 'Coach';
 
- // Router Switcher
+  // Tab switcher
   const renderActiveView = () => {
-    // 1. Figure out which component to show based on the tab
     let TabContent;
     switch (activeTab) {
       case 'dashboard': 
@@ -309,47 +308,12 @@ export default function CoachDashboard() {
         break;
     }
 
-    // 2. Return it wrapped in the Suspense fallback
     return (
       <Suspense>
         {TabContent}
       </Suspense>
     );
   };
-
-
-  const allNavItems = [
-    {
-      label: 'Team Roster',
-      path: '/coach/team',
-      icon: Users,
-      allowedRoles: ['coach', 'athlete'], // Guest can view
-    },
-    {
-      label: 'My Documents',
-      path: '/coach/my-documents',
-      icon: FileText,
-      allowedRoles: ['coach', 'athlete'], // Guest can view
-    },
-    {
-      label: 'Document Verification',
-      path: '/coach/verification',
-      icon: CheckSquare,
-      allowedRoles: ['coach'], // 🚫 HIDDEN from guest/athlete
-    },
-    {
-      label: 'Team Settings',
-      path: '/coach/settings',
-      icon: Settings,
-      allowedRoles: ['coach'], // 🚫 HIDDEN from guest/athlete
-    },
-  ];
-
-  // Filter items down to only what this specific role is allowed to see
-  const visibleNavItems = allNavItems.filter((item) =>
-    item.allowedRoles.includes(role || 'guest')
-  );
-  
 
                 return (
                   <>

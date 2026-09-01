@@ -152,18 +152,18 @@ sendAthleteOtp: async (email: string) => {
         },
       });
 
-      if (error) {
-        set({ isLoading: false });
-        return { error: error.message };
-      }
-      
+    if (error) {
       set({ isLoading: false });
-      return { error: null };
-    } catch (err) {
-       set({ isLoading: false });
-       return { error: 'An unexpected error occurred during sign up.' };
+      return { error: error.message };
     }
-  },
+    
+    set({ isLoading: false });
+    return { error: null };
+  } catch (err) {
+     set({ isLoading: false });
+     return { error: 'An unexpected error occurred during sign up.' };
+  }
+},
   signIn: async (email: string, password: string) => {
     const trimmedEmail = email.trim();
     const { data, error } = await supabase.auth.signInWithPassword({

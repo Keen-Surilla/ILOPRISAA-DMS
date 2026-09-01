@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
@@ -29,10 +29,11 @@ interface PortalShellProps {
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
-  athlete: 'Athlete Portal',
-  coach: 'Coach Portal',
   admin: 'Admin Portal',
+  school_admin: 'School Admin Portal',
+  coach: 'Coach Portal',
   committee: 'Committee Portal',
+  athlete: 'Athlete Portal',
 };
 
 export function PortalShell({ portalTitle, navGroups = [], children }: PortalShellProps) {

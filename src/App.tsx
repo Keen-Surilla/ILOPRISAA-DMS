@@ -8,15 +8,18 @@ import { supabase } from './3-data-tier/config/SupabaseClient';
 
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
-const SignUpPage = lazy(() => import('./1-presentation-tier/pages/SignUpPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
 const AthleteLogin = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteLogin'));
 const AthleteDashboard = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteDashboard'));
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
+const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
+const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/AdminDashboard'));
+const AcceptInvitePage = lazy(() => import('./1-presentation-tier/pages/AcceptInvitePage'));
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
   if (role === 'coach') return <Navigate to="/coach/dashboard" replace />;
+  if (role === 'school_admin') return <Navigate to="/school-admin" replace />;
   if (role === 'admin') return <Navigate to="/admin" replace />;
   if (role === 'committee') return <Navigate to="/committee" replace />;
   if (role === 'athlete') return <Navigate to="/athlete/dashboard" replace />;
@@ -52,22 +55,12 @@ useEffect(() => {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignUpPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/athlete-login" element={<AthleteLogin />} />
             <Route path="/athlete/dashboard" element={<AthleteDashboard />} />
-            
-            {/* 
-              ADDED THIS: The Protected Route for the Athlete Dashboard
-              <Route
-                path="/athlete/*"
-                element={
-                  <ProtectedRoute allowedRoles={['athlete']}>
-                    <AthleteDashboard />
-                  </ProtectedRoute>
-                }
-              /> 
-            */} 
+            <Route path="/accept-invite" element={<AcceptInvitePage />} />
+            <Route path="/school-admin/*" element={<ProtectedRoute allowedRoles={['school_admin']}><SchoolAdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />
             <Route path="/committee/*" element={<ProtectedRoute allowedRoles={['committee']}><CommitteeDashboard /></ProtectedRoute>} />   
             <Route path="*" element={<Navigate to="/" replace />} />

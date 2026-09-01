@@ -6,9 +6,7 @@ import { teamApi } from '../../../3-data-tier/api/teamApi';
 import { documentsApi, TOTAL_REQUIRED_DOCUMENTS } from '../../../3-data-tier/api/documentsApi';
 import { DocumentChecklistModal } from '../../components/ui/DocumentChecklistModal';
 
-// Circular completion ring around the athlete's own avatar — the one visual
-// element in this list that's actually earned by data (their document
-// progress), rather than decoration for its own sake.
+// Circular progress ring showing document completion percentage
 function RosterAvatar({ initial, percent }: { initial: string; percent: number | null }) {
   if (percent === null) {
     return (
@@ -51,8 +49,7 @@ function RosterAvatar({ initial, percent }: { initial: string; percent: number |
 
 export default function AthleteTeamView() {
   const { user } = useAuthStore();
-  // The athlete's own auth id — RLS on team_members only returns rows where
-  // this matches user_id (their own) or shares the same coach_id (teammates).
+  // Current user ID (RLS restricts to own records and teammates)
   const myUserId = user?.id;
 
   const { data: teammates = [], isLoading } = useQuery({
@@ -61,8 +58,7 @@ export default function AthleteTeamView() {
     enabled: !!myUserId,
   });
 
-  // Identify which roster row is "me" so only that one gets a working
-  // documents button — everyone else's stays visibly locked.
+  // Find current user's record to enable documents button
   const myRow = teammates.find(t => t.user_id === myUserId);
 
   const { data: myDocCount = 0 } = useQuery({

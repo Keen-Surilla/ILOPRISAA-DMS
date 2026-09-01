@@ -7,3 +7,8 @@ export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type UserRole = Database['public']['Enums']['user_role'];
 export type EventKind = 'event' | 'deadline' | 'meeting';
 export type CoachProfile = Database['public']['Tables']['coach_profiles']['Row'];
+
+export type Invite = Database['public']['Tables']['invites']['Row'];
+export type InviteStatus = Database['public']['Enums']['invite_status'];
+// Athletes cannot be invited; they're added to rosters by coaches
+export type InviteRole = Exclude<UserRole, 'athlete'>;

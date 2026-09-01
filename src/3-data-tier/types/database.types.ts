@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -45,6 +45,51 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: true
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_audit_log: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          document_id: string
+          from_status: string
+          id: string
+          rejection_reason: string | null
+          to_status: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          document_id: string
+          from_status: string
+          id?: string
+          rejection_reason?: string | null
+          to_status: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          document_id?: string
+          from_status?: string
+          id?: string
+          rejection_reason?: string | null
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_audit_log_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_audit_log_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
         ]
@@ -165,6 +210,45 @@ export type Database = {
         }
         Relationships: []
       }
+      invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          institution_id: string | null
+          invited_by: string
+          role: Database["public"]["Enums"]["user_role"]
+          status: Database["public"]["Enums"]["invite_status"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          institution_id?: string | null
+          invited_by: string
+          role: Database["public"]["Enums"]["user_role"]
+          status?: Database["public"]["Enums"]["invite_status"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          institution_id?: string | null
+          invited_by?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          status?: Database["public"]["Enums"]["invite_status"]
+          token?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -278,11 +362,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_invite: { Args: { p_token: string }; Returns: undefined }
       calculate_prisaa_age: {
         Args: { dob: string; event_year: number }
         Returns: number
       }
       cleanup_expired_events: { Args: never; Returns: undefined }
+      expire_stale_annual_documents: { Args: never; Returns: undefined }
+      get_invite_by_token: {
+        Args: { p_token: string }
+        Returns: {
+          email: string
+          expires_at: string
+          institution_id: string
+          role: Database["public"]["Enums"]["user_role"]
+          status: Database["public"]["Enums"]["invite_status"]
+        }[]
+      }
       get_my_role: { Args: never; Returns: string }
       link_athlete_account: { Args: never; Returns: undefined }
       my_coach_id: { Args: never; Returns: string }
@@ -290,10 +386,12 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      revoke_invite: { Args: { p_invite_id: string }; Returns: undefined }
       run_daily_archival: { Args: never; Returns: undefined }
     }
     Enums: {
-      user_role: "athlete" | "coach" | "admin" | "committee"
+      invite_status: "pending" | "accepted" | "expired" | "revoked"
+      user_role: "athlete" | "coach" | "school_admin" | "committee" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -421,7 +519,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      user_role: ["athlete", "coach", "admin", "committee"],
+      invite_status: ["pending", "accepted", "expired", "revoked"],
+      user_role: ["athlete", "coach", "school_admin", "committee", "admin"],
     },
   },
 } as const

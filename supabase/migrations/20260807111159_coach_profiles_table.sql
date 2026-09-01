@@ -8,7 +8,6 @@ CREATE TABLE coach_profiles (
 
 CREATE INDEX idx_coach_profiles_profile_id ON coach_profiles(profile_id);
 
--- Keep updated_at accurate without relying on every call site remembering to set it.
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -22,7 +21,6 @@ CREATE TRIGGER trg_coach_profiles_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION set_updated_at();
 
--- RLS: a coach can only read/write their own profile row.
 ALTER TABLE coach_profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Coaches can view their own profile"
