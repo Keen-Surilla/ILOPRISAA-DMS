@@ -77,16 +77,6 @@ export default function LoginPage() {
           </button>
           <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
         </div>
-
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-slate-600">Don't have an account?</span>
-          <Link 
-            to="/signup" 
-            className="border border-blue-600 text-blue-600 px-5 py-1.5 rounded-lg font-medium hover:bg-blue-50 transition-colors"
-          >
-            Register
-          </Link>
-        </div>
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6 bg-slate-50/30">

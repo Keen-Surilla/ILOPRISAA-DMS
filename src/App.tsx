@@ -8,7 +8,6 @@ import { supabase } from './3-data-tier/config/SupabaseClient';
 
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
-const SignUpPage = lazy(() => import('./1-presentation-tier/pages/SignUpPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
 const AthleteLogin = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteLogin'));
 const AthleteDashboard = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteDashboard'));
@@ -56,7 +55,6 @@ useEffect(() => {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignUpPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/athlete-login" element={<AthleteLogin />} />
             <Route path="/athlete/dashboard" element={<AthleteDashboard />} />
