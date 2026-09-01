@@ -304,14 +304,14 @@ export default function LandingPage() {
 
      {/* HERO */}
       <main>
-        <section id="home" className="relative overflow-hidden pt-14 pb-24 md:pt-0 md:pb-0 scroll-mt-24">
+        <section id="home" className="relative -mt-2 overflow-hidden pt-0 pb-0 scroll-mt-24">
           
           {/* Full-bleed athlete photo as a right-side background — not a card.
               Only kicks in at lg+, where the larger heading size gives the
               section enough height for this full-bleed technique to read
               correctly. Below that, the grid-column image block below does
               the job at a size that matches its own container instead. */}
-          <div className="hidden lg:flex absolute inset-y-0 right-0 w-1/2 items-center justify-end">
+          <div className="hidden lg:flex absolute inset-y-0 right-0 w-1/2 items-start justify-end">
             <div className="relative">
               <img
                 src={HeroAthletes}
@@ -334,13 +334,13 @@ export default function LandingPage() {
           </div>
 
           <div className="relative max-w-7xl mx-auto px-6 md:px-10 grid md:grid-cols-2 gap-14 items-center">
-            <div className="py-16 md:py-28">
+            <div className="py-16 md:py-28 -translate-y-15">
               <span
                 className="inline-flex items-center gap-2 text-xs font-mono font-semibold rounded-full px-3 py-1"
                 style={{ color: BLUE, backgroundColor: '#EFF6FF', border: '1px solid #DBEAFE' }}
               >
                 <Lock className="h-3 w-3" aria-hidden="true" />
-                The digital standard for Iloilo college athletics.
+                The digital standard for Iloilo Prisaa.
               </span>
 
               <h1 className="font-display text-4xl md:text-5xl lg:text-6xl text-slate-900 leading-[1.05] mt-5 tracking-tight">
