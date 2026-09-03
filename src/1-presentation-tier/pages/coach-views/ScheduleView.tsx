@@ -3,6 +3,7 @@ import { Clock, FileText, X, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import { listEvents, createEvent, updateEvent, deleteEvent, type CalendarEventRow } from '../../../3-data-tier/services/eventService';
 import { EventCalendar } from '../../components/calendar/EventCalendar';
+import { PremiumDateTimePicker } from '../../components/ui/PremiumDateTimePicker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 type UIEventType = 'event' | 'meeting' | 'deadline';
@@ -162,9 +163,22 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
 
   const handleSaveEvent = (e: React.FormEvent) => {
   e.preventDefault();
+  if (!newEvent.date || !newEvent.time) {
+    setErrorMessage('Please select a date and time.');
+    return;
+  }
   setErrorMessage(null);
   saveEventMutation.mutate({ eventData: newEvent, id: editingId });
 };
+
+  // Combines the form's separate date/time strings into the local ISO value
+  // the picker expects, and splits the picker's output back into those fields.
+  const combinedDateTime = newEvent.date ? `${newEvent.date}T${newEvent.time || '00:00'}:00` : null;
+
+  const handleDateTimeChange = (isoLocal: string) => {
+    const [datePart, timePart] = isoLocal.split('T');
+    setNewEvent(prev => ({ ...prev, date: datePart, time: (timePart || '00:00').slice(0, 5) }));
+  };
 
   const handleDeleteFromCalendar = async (eventId: string): Promise<boolean> => {
     setPendingDeleteId(eventId);
@@ -353,7 +367,7 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
               <h3 className="font-bold text-lg text-slate-800">{editingId ? 'Edit Event' : 'Add New Event'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
@@ -376,15 +390,13 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
                 <input type="text" required maxLength={120} value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Date</label>
-                  <input type="date" required value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Time</label>
-                  <input type="time" required value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600 bg-white" />
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Date &amp; Time</label>
+                <PremiumDateTimePicker
+                  value={combinedDateTime}
+                  onChange={handleDateTimeChange}
+                  placeholder="Select date & time"
+                />
               </div>
 
               <div>

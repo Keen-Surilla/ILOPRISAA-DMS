@@ -9,8 +9,6 @@ import { supabase } from './3-data-tier/config/SupabaseClient';
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
-const AthleteLogin = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteLogin'));
-const AthleteDashboard = lazy(() => import('./1-presentation-tier/pages/athlete/AthleteDashboard'));
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
 const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
 const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/AdminDashboard'));
@@ -56,8 +54,6 @@ useEffect(() => {
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
-            <Route path="/athlete-login" element={<AthleteLogin />} />
-            <Route path="/athlete/dashboard" element={<AthleteDashboard />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
             <Route path="/school-admin/*" element={<ProtectedRoute allowedRoles={['school_admin']}><SchoolAdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />

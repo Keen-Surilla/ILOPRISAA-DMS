@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Upload, Check, ExternalLink, Trash2, Loader2, ChevronDown } from 'lucide-react';
+import { X, Upload, Check, ExternalLink, Trash2, Loader2, ChevronDown, Sparkles, AlertTriangle, FolderUp } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   documentsApi,
@@ -9,8 +9,10 @@ import {
   type DocumentRow,
 } from '../../../3-data-tier/api/documentsApi';
 import type { DocumentType } from '../../../3-data-tier/types/database.types.extras';
-import { supabase } from '../../../3-data-tier/config/SupabaseClient';
-import { verifyDocumentAI, updateAthleteDOB } from '../../../3-data-tier/api/aiVerificationApi';
+import { classifyDocumentType } from '../../../3-data-tier/api/aiVerificationApi';
+import { uploadAthleteDocument } from '../../../3-data-tier/api/documentUploadPipeline';
+
+const MAX_FILE_SIZE_MB = 15;
 
 interface DocumentChecklistModalProps {
   isOpen: boolean;
@@ -20,6 +22,182 @@ interface DocumentChecklistModalProps {
   eligibilityCheckDate?: string | null;
   onClose: () => void;
   readOnly?: boolean;
+}
+
+interface BulkFileEntry {
+  id: string;
+  file: File;
+  guessedType: DocumentType | null;
+  confidence: 'high' | 'medium' | 'low';
+  selectedType: DocumentType | '';
+  status: 'classifying' | 'uploading' | 'error' | 'skipped' | 'needs_replacement';
+  error?: string;
+  existingDoc?: DocumentRow;
+}
+
+function DocumentRowItem({
+  item,
+  doc,
+  isBusy,
+  readOnly,
+  onView,
+  onUpload,
+  onRemove,
+  onReplace,
+}: {
+  item: typeof DOCUMENT_CATEGORIES[0]['items'][0];
+  doc: DocumentRow | undefined;
+  isBusy: boolean;
+  readOnly: boolean;
+  onView: (doc: DocumentRow) => void;
+  onUpload: (type: DocumentType, file: File) => void;
+  onRemove: (doc: DocumentRow) => void;
+  onReplace: (type: DocumentType, file: File, doc: DocumentRow) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isRejected = doc?.status === 'action_required';
+  const isExpired = doc?.status === 'expired';
+  const needsAction = isRejected || isExpired;
+  const isPending = doc?.status === 'pending_review';
+  const isVerified = doc?.status === 'verified';
+
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
+        needsAction
+          ? 'border-red-200 bg-red-50/60'
+          : doc
+          ? 'border-green-200 bg-green-50/50'
+          : 'border-slate-200'
+      }`}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        {needsAction ? (
+          <X className="w-4 h-4 text-red-600 shrink-0" />
+        ) : doc ? (
+          <Check className="w-4 h-4 text-green-600 shrink-0" />
+        ) : (
+          <div className="w-4 h-4 rounded-full border-2 border-slate-300 shrink-0" />
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-slate-700">{item.label}</p>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                item.category === 'permanent'
+                  ? 'bg-blue-100 text-blue-600'
+                  : 'bg-amber-100 text-amber-600'
+              }`}
+            >
+              {item.category === 'permanent' ? 'On File' : 'Renew Yearly'}
+            </span>
+            {isRejected && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                Rejected — Needs Resubmission
+              </span>
+            )}
+            {isExpired && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                Expired — Needs Renewal
+              </span>
+            )}
+            {isPending && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                Pending Review
+              </span>
+            )}
+            {isVerified && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
+                Verified
+              </span>
+            )}
+          </div>
+          {doc && (
+            <p className="text-[11px] text-slate-400 truncate max-w-[260px]">
+              {doc.original_filename}
+            </p>
+          )}
+          {isRejected && doc?.rejection_reason && (
+            <p className="text-[11px] text-red-600 mt-0.5 max-w-[280px]">
+              Reason: {doc.rejection_reason}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        {isBusy ? (
+          <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+        ) : doc ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onView(doc)}
+              title="View file"
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 rounded transition-[color,background-color,transform]"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </button>
+            {!readOnly && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title={needsAction ? 'Resubmit file' : 'Replace file'}
+                  className={
+                    needsAction
+                      ? 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-700 bg-red-100 hover:bg-red-200 active:scale-[0.97] rounded-lg transition-[background-color,transform]'
+                      : 'p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 active:scale-90 rounded transition-[color,background-color,transform]'
+                  }
+                >
+                  <Upload className="w-4 h-4" />
+                  {needsAction && <span>Resubmit</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRemove(doc)}
+                  title="Remove file"
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 active:scale-90 rounded transition-[color,background-color,transform]"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </>
+        ) : readOnly ? (
+          <span className="text-[10px] text-slate-400 italic">Not uploaded yet</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-[0.97] rounded-lg transition-[background-color,transform]"
+          >
+            <Upload className="w-3.5 h-3.5" /> Upload
+          </button>
+        )}
+        {!readOnly && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                if (doc) {
+                  onReplace(item.type, file, doc);
+                } else {
+                  onUpload(item.type, file);
+                }
+              }
+              e.target.value = '';
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function DocumentChecklistModal({
@@ -34,12 +212,18 @@ export function DocumentChecklistModal({
   const queryClient = useQueryClient();
   const [openCategoryId, setOpenCategoryId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [pendingType, setPendingType] = useState<DocumentType | null>(null);
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [ageWarning, setAgeWarning] = useState<{ age: number; asOfDate: string } | null>(null);
+  const [docPendingDelete, setDocPendingDelete] = useState<DocumentRow | null>(null);
+  const [bulkFiles, setBulkFiles] = useState<BulkFileEntry[]>([]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const bulkInputRef = useRef<HTMLInputElement | null>(null);
 
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
+  const processingChainRef = useRef<Promise<void>>(Promise.resolve());
+  const [docPendingReplace, setDocPendingReplace] = useState<{ type: DocumentType, file: File, existingDoc: DocumentRow } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -52,11 +236,17 @@ export function DocumentChecklistModal({
       const timeout = setTimeout(() => {
         setShouldRender(false);
         setIsClosing(false);
+        setBulkFiles([]);
+        setDocPendingDelete(null);
+        setSuccessMessage(null);
       }, 150);
       return () => clearTimeout(timeout);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, shouldRender]);
+
+  useEffect(() => {
+    setBulkFiles([]);
+  }, [athleteId]);
 
   const { data: documents = [], isLoading, isError } = useQuery({
     queryKey: ['documents', athleteId],
@@ -70,7 +260,6 @@ export function DocumentChecklistModal({
     return map;
   }, [documents]);
 
-  // Counts verified/pending documents only (action_required and expired need resubmission)
   const isSlotFilled = (doc: DocumentRow | undefined) =>
     doc?.status === 'verified' || doc?.status === 'pending_review';
 
@@ -94,41 +283,26 @@ export function DocumentChecklistModal({
 
   const uploadMutation = useMutation({
     mutationFn: async ({ type, file }: { type: DocumentType; file: File }) => {
-      // Step 1: AI verification (only runs for mapped types, skips PDFs)
-      const aiResult = await verifyDocumentAI(file, type);
+      const result = await uploadAthleteDocument(athleteId as string, type, file, eligibilityCheckDate);
 
-      if (!aiResult.success) {
-        throw new Error(aiResult.error ?? 'Document verification failed.');
+      if (result.ageWarning) setAgeWarning(result.ageWarning);
+
+      if (!result.success) {
+        throw new Error(result.error ?? 'Upload failed. Please try again.');
       }
 
-      // Step 2: If a DOB was extracted, check eligibility BEFORE saving it.
-      if (aiResult.data?.dateOfBirth) {
-        const eventYear = eligibilityCheckDate
-          ? new Date(eligibilityCheckDate).getFullYear()
-          : new Date().getFullYear();
-
-        const { data: age, error: ageError } = (await supabase.rpc('calculate_prisaa_age', {
-          dob: aiResult.data.dateOfBirth,
-          event_year: eventYear,
-        })) as { data: number | null; error: any };
-
-        if (!ageError && age !== null) {
-          if (age >= 26) {
-            setAgeWarning({ age, asOfDate: `${eventYear}` });
-          } else {
-            await updateAthleteDOB(athleteId as string, aiResult.data.dateOfBirth);
-          }
-        }
-      }
-
-      // Step 3: Proceed with the existing upload, unchanged
-      return documentsApi.uploadDocument(athleteId as string, type, file);
+      return result.data;
     },
     onMutate: ({ type }) => {
       setErrorMessage(null);
+      setSuccessMessage(null);
       setPendingType(type);
     },
-    onSuccess: () => invalidateRelatedQueries(),
+    onSuccess: () => {
+      invalidateRelatedQueries();
+      setSuccessMessage('Document successfully uploaded and saved.');
+      setTimeout(() => setSuccessMessage(null), 4000);
+    },
     onError: (error: any) => setErrorMessage(error?.message || 'Upload failed. Please try again.'),
     onSettled: () => setPendingType(null),
   });
@@ -137,6 +311,7 @@ export function DocumentChecklistModal({
     mutationFn: (doc: DocumentRow) => documentsApi.removeDocument(doc.id, doc.storage_path),
     onMutate: (doc) => {
       setErrorMessage(null);
+      setSuccessMessage(null);
       setPendingType(doc.document_type as DocumentType);
     },
     onSuccess: () => invalidateRelatedQueries(),
@@ -153,21 +328,141 @@ export function DocumentChecklistModal({
     }
   };
 
+  const labelFor = (type: DocumentType) => REQUIRED_DOCUMENTS.find((r) => r.type === type)?.label ?? type;
+
+  const updateBulkEntry = (id: string, patch: Partial<BulkFileEntry>) => {
+    setBulkFiles((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  };
+
+  const processBulkEntry = async (entry: BulkFileEntry) => {
+    let guessedType: DocumentType | null = null;
+    let confidence: 'high' | 'medium' | 'low' = 'low';
+
+    try {
+      const result = await classifyDocumentType(entry.file);
+      if (result.success) {
+        guessedType = result.documentType ?? null;
+        confidence = result.confidence ?? 'low';
+      }
+    } catch {
+      // fall through
+    }
+
+    if (!guessedType || confidence === 'low') {
+      updateBulkEntry(entry.id, {
+        status: 'skipped',
+        guessedType,
+        confidence,
+        error: "Couldn't confidently identify this document — upload it manually below.",
+      });
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: ['documents', athleteId] });
+    const latestDocs = queryClient.getQueryData<DocumentRow[]>(['documents', athleteId]) ?? documents;
+    const existing = latestDocs.find((d) => d.document_type === guessedType);
+
+    if (existing) {
+      if (existing.status === 'verified') {
+        updateBulkEntry(entry.id, {
+          status: 'skipped',
+          guessedType,
+          confidence,
+          selectedType: guessedType,
+          error: `Detected as "${labelFor(guessedType)}", but that slot is already VERIFIED.`,
+        });
+      } else {
+        updateBulkEntry(entry.id, {
+          status: 'needs_replacement',
+          guessedType,
+          confidence,
+          selectedType: guessedType,
+          existingDoc: existing,
+          error: `Detected as "${labelFor(guessedType)}". An unverified file already exists here.`,
+        });
+      }
+      return;
+    }
+
+    updateBulkEntry(entry.id, { status: 'uploading', guessedType, confidence, selectedType: guessedType });
+
+    try {
+      await uploadMutation.mutateAsync({ type: guessedType, file: entry.file });
+      setBulkFiles((prev) => prev.filter((e) => e.id !== entry.id));
+    } catch (err: any) {
+      updateBulkEntry(entry.id, { status: 'error', error: err?.message ?? 'Upload failed.' });
+    }
+  };
+
+  const addFilesToBulkBatch = (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
+
+    const validFiles = files.filter((file) => {
+      if (file.size / (1024 * 1024) > MAX_FILE_SIZE_MB) {
+        setErrorMessage(`"${file.name}" exceeds the ${MAX_FILE_SIZE_MB}MB limit and was skipped.`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length === 0) return;
+
+    const newEntries: BulkFileEntry[] = validFiles.map((file) => ({
+      id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      guessedType: null,
+      confidence: 'low',
+      selectedType: '',
+      status: 'classifying',
+    }));
+
+    setBulkFiles((prev) => [...prev, ...newEntries]);
+
+    newEntries.forEach((entry) => {
+      processingChainRef.current = processingChainRef.current.then(() => processBulkEntry(entry));
+    });
+  };
+
   if (!shouldRender) return null;
 
   return (
     <div
-      className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 motion-reduce:animate-none ${
-        isClosing ? 'animate-out fade-out duration-150' : 'animate-in fade-in duration-200'
-      }`}
+      role="dialog"
+      aria-modal="true"
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!readOnly) setIsDraggingOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsDraggingOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        if (!readOnly && e.dataTransfer.files?.length) addFilesToBulkBatch(e.dataTransfer.files);
+      }}
+      className={`fixed inset-0 flex items-center justify-center z-50 p-4 transition-colors motion-reduce:animate-none ${
+        isDraggingOver ? 'bg-blue-900/40 backdrop-blur-md' : 'bg-slate-900/40 backdrop-blur-sm'
+      } ${isClosing ? 'animate-out fade-out duration-150' : 'animate-in fade-in duration-200'}`}
     >
       <div
-        className={`bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col motion-reduce:animate-none ${
+        className={`bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col pointer-events-auto motion-reduce:animate-none ${
           isClosing
             ? 'animate-out fade-out zoom-out-95 duration-150'
             : 'animate-in fade-in zoom-in-95 duration-200'
         }`}
       >
+        {isDraggingOver && (
+          <div className="absolute inset-0 z-50 bg-blue-50/90 border-4 border-blue-400 border-dashed rounded-2xl flex flex-col items-center justify-center pointer-events-none">
+            <FolderUp className="w-16 h-16 text-blue-500 mb-4 animate-bounce" />
+            <h2 className="text-2xl font-bold text-blue-700">Drop files to upload</h2>
+            <p className="text-blue-600 mt-2">AI will automatically sort them</p>
+          </div>
+        )}
+
         <div className="flex justify-between items-start p-6 pb-4 border-b border-slate-100">
           <div>
             <h3 className="font-bold text-lg text-slate-800">Documents — {athleteName}</h3>
@@ -194,7 +489,13 @@ export function DocumentChecklistModal({
               {completedCount} / {TOTAL_REQUIRED_DOCUMENTS}
             </span>
           </div>
-          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="w-full h-2 bg-slate-100 rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={(completedCount / TOTAL_REQUIRED_DOCUMENTS) * 100}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
             <div
               className={`h-full rounded-full transition-[width] motion-reduce:transition-none ${
                 isComplete ? 'bg-green-500' : 'bg-blue-600'
@@ -205,8 +506,26 @@ export function DocumentChecklistModal({
         </div>
 
         {errorMessage && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg">
-            {errorMessage}
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg flex justify-between items-center animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 font-medium">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+            <button onClick={() => setErrorMessage(null)} className="text-red-500 hover:text-red-700 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mx-6 mt-4 p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg flex justify-between items-center animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 font-medium">
+              <Check className="w-4 h-4 shrink-0" />
+              <span>{successMessage}</span>
+            </div>
+            <button onClick={() => setSuccessMessage(null)} className="text-green-500 hover:text-green-700 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
@@ -214,8 +533,7 @@ export function DocumentChecklistModal({
           <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-300 rounded-lg">
             <p className="text-xs text-red-700 font-medium">
               This athlete would be {ageWarning.age} years old as of {ageWarning.asOfDate} — over
-              the age limit (25 and under) for ILOPRISAA eligibility. This date of birth was NOT
-              saved.
+              the age limit (25 and under) for ILOPRISAA eligibility. This date of birth was NOT saved.
             </p>
             <button
               type="button"
@@ -224,6 +542,104 @@ export function DocumentChecklistModal({
             >
               Dismiss
             </button>
+          </div>
+        )}
+
+        {!readOnly && (
+          <div className="px-6 pt-4">
+            <div className="border border-slate-200 bg-slate-50/50 rounded-xl p-4 text-center">
+              <FolderUp className="w-5 h-5 text-slate-400 mx-auto mb-1.5" />
+              <p className="text-xs text-slate-500">
+                Drag multiple files anywhere on screen, or{' '}
+                <button
+                  type="button"
+                  onClick={() => bulkInputRef.current?.click()}
+                  className="text-blue-600 font-bold hover:underline"
+                >
+                  browse files
+                </button>{' '}
+                — Max {MAX_FILE_SIZE_MB}MB per file.
+              </p>
+              <input
+                ref={bulkInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) addFilesToBulkBatch(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+
+            {bulkFiles.length > 0 && (
+              <div className="mt-3 space-y-2 border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto">
+                {bulkFiles.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`flex items-center gap-2 p-2 rounded-lg border text-xs ${
+                      entry.status === 'error' || entry.status === 'skipped' || entry.status === 'needs_replacement'
+                        ? 'border-amber-200 bg-amber-50/60'
+                        : 'border-slate-100 bg-white'
+                    }`}
+                  >
+                    <span className="truncate max-w-[140px] font-medium text-slate-600 shrink-0" title={entry.file.name}>
+                      {entry.file.name}
+                    </span>
+
+                    {entry.status === 'classifying' && (
+                      <span className="flex items-center gap-1 text-slate-400">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Detecting…
+                      </span>
+                    )}
+
+                    {entry.status === 'uploading' && entry.guessedType && (
+                      <span className="flex items-center gap-1.5 text-slate-500 min-w-0">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        <span className="truncate">Uploading to {labelFor(entry.guessedType)}…</span>
+                        <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-600 shrink-0">
+                          <Sparkles className="w-3 h-3" /> AI
+                        </span>
+                      </span>
+                    )}
+
+                    {(entry.status === 'skipped' || entry.status === 'error') && (
+                      <span className="flex-1 min-w-0 text-amber-700">{entry.error}</span>
+                    )}
+
+                    {entry.status === 'needs_replacement' && entry.guessedType && entry.existingDoc && (
+                      <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                        <span className="text-amber-700 truncate">{entry.error}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDocPendingReplace({
+                              type: entry.guessedType as DocumentType,
+                              file: entry.file,
+                              existingDoc: entry.existingDoc as DocumentRow,
+                            });
+                            setBulkFiles((prev) => prev.filter((e) => e.id !== entry.id));
+                          }}
+                          className="px-2.5 py-1 text-[10px] font-bold text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded shadow-sm transition-all shrink-0"
+                        >
+                          Confirm Replacement
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setBulkFiles((prev) => prev.filter((e) => e.id !== entry.id))}
+                      title="Dismiss"
+                      className="text-slate-300 hover:text-red-500 shrink-0 ml-auto"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -276,151 +692,21 @@ export function DocumentChecklistModal({
                   >
                     <div className="overflow-hidden" inert={!isOpenCat}>
                       <div className="p-3 space-y-2 bg-white">
-                        {category.items.map((item) => {
-                          const doc = byType.get(item.type);
-                          const isBusy = pendingType === item.type;
-                          const isRejected = doc?.status === 'action_required';
-                          const isExpired = doc?.status === 'expired';
-                          const needsAction = isRejected || isExpired;
-                          const isPending = doc?.status === 'pending_review';
-                          const isVerified = doc?.status === 'verified';
-
-                          return (
-                            <div
-                              key={item.type}
-                              className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
-                                needsAction
-                                  ? 'border-red-200 bg-red-50/60'
-                                  : doc
-                                  ? 'border-green-200 bg-green-50/50'
-                                  : 'border-slate-200'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                {needsAction ? (
-                                  <X className="w-4 h-4 text-red-600 shrink-0" />
-                                ) : doc ? (
-                                  <Check className="w-4 h-4 text-green-600 shrink-0" />
-                                ) : (
-                                  <div className="w-4 h-4 rounded-full border-2 border-slate-300 shrink-0" />
-                                )}
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="text-sm font-medium text-slate-700">{item.label}</p>
-                                    <span
-                                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                                        item.category === 'permanent'
-                                          ? 'bg-blue-100 text-blue-600'
-                                          : 'bg-amber-100 text-amber-600'
-                                      }`}
-                                    >
-                                      {item.category === 'permanent' ? 'On File' : 'Renew Yearly'}
-                                    </span>
-                                    {isRejected && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
-                                        Rejected — Needs Resubmission
-                                      </span>
-                                    )}
-                                    {isExpired && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
-                                        Expired — Needs Renewal
-                                      </span>
-                                    )}
-                                    {isPending && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-                                        Pending Review
-                                      </span>
-                                    )}
-                                    {isVerified && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
-                                        Verified
-                                      </span>
-                                    )}
-                                  </div>
-                                  {doc && (
-                                    <p className="text-[11px] text-slate-400 truncate max-w-[260px]">
-                                      {doc.original_filename}
-                                    </p>
-                                  )}
-                                  {isRejected && doc?.rejection_reason && (
-                                    <p className="text-[11px] text-red-600 mt-0.5 max-w-[280px]">
-                                      Reason: {doc.rejection_reason}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {isBusy ? (
-                                  <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                                ) : doc ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleView(doc)}
-                                      title="View file"
-                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 rounded transition-[color,background-color,transform]"
-                                    >
-                                      <ExternalLink className="w-4 h-4" />
-                                    </button>
-                                    {!readOnly && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => fileInputRefs.current[item.type]?.click()}
-                                          title={needsAction ? 'Resubmit file' : 'Replace file'}
-                                          className={
-                                            needsAction
-                                              ? 'flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-700 bg-red-100 hover:bg-red-200 active:scale-[0.97] rounded-lg transition-[background-color,transform]'
-                                              : 'p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 active:scale-90 rounded transition-[color,background-color,transform]'
-                                          }
-                                        >
-                                          <Upload className="w-4 h-4" />
-                                          {needsAction && <span>Resubmit</span>}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => removeMutation.mutate(doc)}
-                                          title="Remove file"
-                                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 active:scale-90 rounded transition-[color,background-color,transform]"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
-                                      </>
-                                    )}
-                                  </>
-                                ) : readOnly ? (
-                                  <span className="text-[10px] text-slate-400 italic">
-                                    Not uploaded yet
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => fileInputRefs.current[item.type]?.click()}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-[0.97] rounded-lg transition-[background-color,transform]"
-                                  >
-                                    <Upload className="w-3.5 h-3.5" /> Upload
-                                  </button>
-                                )}
-                                {!readOnly && (
-                                  <input
-                                    ref={(el) => {
-                                      fileInputRefs.current[item.type] = el;
-                                    }}
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) uploadMutation.mutate({ type: item.type, file });
-                                      e.target.value = '';
-                                    }}
-                                  />
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {category.items.map((item) => (
+                          <DocumentRowItem
+                            key={item.type}
+                            item={item}
+                            doc={byType.get(item.type)}
+                            isBusy={pendingType === item.type}
+                            readOnly={readOnly}
+                            onView={handleView}
+                            onUpload={(type, file) => uploadMutation.mutate({ type, file })}
+                            onRemove={(doc) => setDocPendingDelete(doc)}
+                            onReplace={(type, file, doc) =>
+                              setDocPendingReplace({ type, file, existingDoc: doc })
+                            }
+                          />
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -440,6 +726,103 @@ export function DocumentChecklistModal({
           </button>
         </div>
       </div>
+
+      {docPendingDelete && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[60] p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDocPendingDelete(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5 text-red-600" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-sm text-slate-800">Remove this file?</h4>
+                <p className="text-xs text-slate-500 mt-1 break-words">
+                  "{docPendingDelete.original_filename}" will be permanently deleted. This can't be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setDocPendingDelete(null)}
+                className="flex-1 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] rounded-lg transition-[background-color,transform]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  removeMutation.mutate(docPendingDelete);
+                  setDocPendingDelete(null);
+                }}
+                className="flex-1 px-3 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:scale-[0.98] rounded-lg transition-[background-color,transform]"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {docPendingReplace && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[60] p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDocPendingReplace(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-sm text-slate-800">Replace Existing Document?</h4>
+                <p className="text-xs text-slate-500 mt-1 break-words leading-relaxed">
+                  {docPendingReplace.existingDoc.status === 'verified'
+                    ? "This document has already been verified by the screening committee. Replacing it will permanently delete the current file and reset its status to 'Pending Review'. Do you wish to continue?"
+                    : 'A file already exists in this slot. Uploading a new file will permanently overwrite the current one. Do you wish to continue?'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setDocPendingReplace(null)}
+                className="flex-1 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] rounded-lg transition-[background-color,transform]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  uploadMutation.mutate({
+                    type: docPendingReplace.type,
+                    file: docPendingReplace.file,
+                  });
+                  setDocPendingReplace(null);
+                }}
+                className="flex-1 px-3 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-[0.98] rounded-lg transition-[background-color,transform]"
+              >
+                Yes, Replace Document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

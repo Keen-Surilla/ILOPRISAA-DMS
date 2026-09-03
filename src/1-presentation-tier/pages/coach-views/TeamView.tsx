@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { X, FileText, Users, Filter, CheckCircle2, UserPlus } from 'lucide-react';
+import { X, FileText, Users, Filter, CheckCircle2, UserPlus, FolderUp } from 'lucide-react';
+import { TeamBulkUploadModal } from '../../components/ui/TeamBulkUploadModal';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import { TableSkeleton } from '../../components/ui/SkeletonLoading';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
@@ -147,6 +148,7 @@ export default function TeamView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [athleteToDelete, setAthleteToDelete] = useState<string | null>(null);
   const [docsAthlete, setDocsAthlete] = useState<{ id: string; name: string } | null>(null);
+  const [isTeamBulkUploadOpen, setIsTeamBulkUploadOpen] = useState(false);
   const [shouldRenderAddModal, setShouldRenderAddModal] = useState(false);
   const [isAddModalClosing, setIsAddModalClosing] = useState(false);
 
@@ -183,7 +185,7 @@ const filteredAthletes = useMemo(() => {
 }, [athletes, divisionFilter]);
 
 
-    // Get team acronym from coach ID
+    // Add this inside TeamView.tsx so it can read the acronym!
   const getTeamAcronym = (id?: string) => {
     if (!id) return 'TM'; 
     return id.substring(0, 10).toUpperCase(); 
@@ -191,19 +193,32 @@ const filteredAthletes = useMemo(() => {
 
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const handleCopyInviteLink = () => {
-    // Create 30-minute expiring invite link
+ const handleCopyInviteLink = () => {
+    // 1. Calculate the exact time 30 minutes from right now (in milliseconds)
     const expirationTime = Date.now() + (30 * 60 * 1000); 
-    const tokenData = JSON.stringify({ coachId: profile?.id, exp: expirationTime });
+
+    // 2. Create a small package of data
+    const tokenData = JSON.stringify({
+      // We include the coach ID so you know whose team they belong to!
+      coachId: profile?.id, 
+      exp: expirationTime
+    });
+
+    // 3. Scramble the data into a Base64 string (makes it look like a real security token)
     const encodedToken = btoa(tokenData);
+
+    // 4. Build the URL with the token attached to the end
     const inviteUrl = `${window.location.origin}/athlete-login?invite=${encodedToken}`;
     
+    // Copy to clipboard
     navigator.clipboard.writeText(inviteUrl);
+    
+    // Show success checkmark
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  // Batch query for all athletes' document counts
+  // One count-query for the whole roster instead of one per row.
   const athleteIds = useMemo(() => athletes.map(a => a.id), [athletes]);
   const { data: documentCounts = {} } = useQuery({
     queryKey: ['documentCounts', currentUserId, athleteIds],
@@ -217,9 +232,11 @@ const filteredAthletes = useMemo(() => {
     : new Date().getFullYear();
 }, [upcomingEvents]);
 
+  // 2. Setup the Add Mutation
   const addAthleteMutation = useMutation({
     mutationFn: (athleteData: any) => teamApi.addAthlete(athleteData),
     onSuccess: () => {
+      // Magically refreshes the athlete list in the background!
       queryClient.invalidateQueries({ queryKey: ['teamMembers', currentUserId] });
       setIsModalOpen(false);
       setNewAthlete({ name: '', email: '', division: '', date_of_birth: '' });
@@ -349,23 +366,6 @@ const filteredAthletes = useMemo(() => {
     </p>
   </div>
 
-  {/* Right Side: Action Buttons (Invite Link + Add Athlete) */}
-  <div className="flex items-center gap-3">
-    
-    {/* THE NEW INVITE LINK BUTTON (Moved to the right) */}
-    <button 
-      onClick={handleCopyInviteLink}
-      className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-[color,background-color,transform] shadow-sm active:scale-95 shrink-0"
-      title="Copy Athlete Login Link"
-    >
-      {linkCopied ? <Check className="w-4 h-4 text-green-600" /> : <LinkIcon className="w-4 h-4" />}
-      {linkCopied ? <span className="text-green-700">Copied!</span> : 'Invite Athlete to login'}
-    </button>
-
-    {/* Right Side: Your "Add Athlete" Button stays right next to it here */}
-    {/* <AddAthleteButton /> */}
-    
-  </div>
 </header>
 
 
@@ -466,12 +466,20 @@ const filteredAthletes = useMemo(() => {
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h2 className="font-bold text-slate-700">Athletes List</h2>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.97] border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium transition-[color,background-color,transform] flex items-center gap-1.5 shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" /> Add Athlete
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsTeamBulkUploadOpen(true)}
+              className="bg-purple-50 text-purple-700 hover:bg-purple-100 active:scale-[0.97] border border-purple-200 px-3 py-2 rounded-lg text-sm font-medium transition-[color,background-color,transform] flex items-center gap-1.5 shadow-sm"
+            >
+              <FolderUp className="w-4 h-4" /> Upload for Whole Team
+            </button>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.97] border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium transition-[color,background-color,transform] flex items-center gap-1.5 shadow-sm"
+            >
+              <UserPlus className="w-4 h-4" /> Add Athlete
+            </button>
+          </div>
         </div>
         
         <div className="overflow-x-auto p-6 pt-2">
@@ -679,6 +687,13 @@ const filteredAthletes = useMemo(() => {
   coachUserId={currentUserId}
   eligibilityCheckDate={upcomingEvents[0]?.event_date ?? null}
   onClose={() => setDocsAthlete(null)}
+/>
+<TeamBulkUploadModal
+  isOpen={isTeamBulkUploadOpen}
+  onClose={() => setIsTeamBulkUploadOpen(false)}
+  roster={athletes.map((a) => ({ id: a.id, name: a.name }))}
+  coachUserId={currentUserId}
+  eligibilityCheckDate={upcomingEvents[0]?.event_date ?? null}
 />
     </div>
   );
