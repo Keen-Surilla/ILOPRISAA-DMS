@@ -10,7 +10,6 @@ import { teamApi } from '../../../3-data-tier/api/teamApi';
 import { listEvents } from '../../../3-data-tier/services/eventService';
 import { documentsApi, TOTAL_REQUIRED_DOCUMENTS } from '../../../3-data-tier/api/documentsApi';
 import { getProfile } from '../../../3-data-tier/services/profileService';
-import { Link as LinkIcon, Check } from 'lucide-react';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
 import { DivisionSelect } from '../../components/ui/DivisionSelect';
 
@@ -189,33 +188,6 @@ const filteredAthletes = useMemo(() => {
   const getTeamAcronym = (id?: string) => {
     if (!id) return 'TM'; 
     return id.substring(0, 10).toUpperCase(); 
-  };
-
-  const [linkCopied, setLinkCopied] = useState(false);
-
- const handleCopyInviteLink = () => {
-    // 1. Calculate the exact time 30 minutes from right now (in milliseconds)
-    const expirationTime = Date.now() + (30 * 60 * 1000); 
-
-    // 2. Create a small package of data
-    const tokenData = JSON.stringify({
-      // We include the coach ID so you know whose team they belong to!
-      coachId: profile?.id, 
-      exp: expirationTime
-    });
-
-    // 3. Scramble the data into a Base64 string (makes it look like a real security token)
-    const encodedToken = btoa(tokenData);
-
-    // 4. Build the URL with the token attached to the end
-    const inviteUrl = `${window.location.origin}/athlete-login?invite=${encodedToken}`;
-    
-    // Copy to clipboard
-    navigator.clipboard.writeText(inviteUrl);
-    
-    // Show success checkmark
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   // One count-query for the whole roster instead of one per row.

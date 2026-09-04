@@ -1,1 +1,29 @@
+/* 1. Import your Google Fonts first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* 2. Import Tailwind v4 */
 @import "tailwindcss";
+
+/* 3. Define your custom theme variables */
+@theme {
+  --font-sora: 'Sora', 'Inter', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --animate-marquee-scroll: iloprisaa-marquee 34s linear infinite;
+
+  @keyframes iloprisaa-marquee {
+    0% { transform: translateX(-50%); }
+    100% { transform: translateX(0%); }
+  }
+}
+
+/* 4. Add a custom utility for the hover pause state */
+@utility pause-animation {
+  animation-play-state: paused;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 80px; 
+}

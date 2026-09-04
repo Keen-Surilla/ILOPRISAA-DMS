@@ -1,4 +1,3 @@
-// src/1-presentation-tier/pages/committee-views/ComplianceOverview.tsx
 import { useMemo, useState } from 'react';
 import { Loader2, Users, Clock, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';

@@ -16,10 +16,7 @@ export const ILOPRISAA_SCHOOLS: School[] = [
   { id: 'SJI', name: 'Sun Yat Sen High School' },
 ];
 
-// Looks up a school by matching a stored institution_id (which may be a code
-// like 'WIT', or messy free text like 'wit' / 'Western Institute of Technology')
-// against the canonical id or name, case-insensitively. Falls back to null if
-// nothing matches, so callers can decide how to label unmatched/legacy values.
+
 export function findSchool(institutionId: string | null | undefined): School | null {
   if (!institutionId) return null;
   const q = institutionId.trim().toUpperCase();
