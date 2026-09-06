@@ -25,6 +25,9 @@ export interface DocumentRecordRow {
   // or an "Unassigned" label rather than assume it's always populated.
   school_id: string | null;
   school_name: string | null;
+  division: string | null;
+  sport: string | null;
+  gender: string | null;
 }
 
 export interface RecordsFilters {
@@ -32,6 +35,9 @@ export interface RecordsFilters {
   athleteQuery?: string;  // free-text match on athlete/coach name
   documentType?: string;
   status?: DocumentStatus;
+  division?: string;
+  sport?: string;
+  gender?: string;
 }
 
 export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
@@ -53,7 +59,7 @@ export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
 
   const { data: athletes, error: athletesError } = await supabase
     .from('team_members')
-    .select('id, name, coach_id')
+    .select('id, name, coach_id, division, user_id, sport, gender')
     .in('id', athleteIds);
 
   if (athletesError) {
@@ -98,6 +104,9 @@ export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
       institution_id: coach?.institution_id ?? null,
       school_id: school?.id ?? null,
       school_name: school?.name ?? null,
+      division: athlete?.division ?? null,
+      sport: athlete?.sport ?? null,
+      gender: athlete?.gender ?? null,
     };
   });
 }
@@ -111,9 +120,12 @@ export function applyRecordsFilters(rows: DocumentRecordRow[], filters: RecordsF
     if (filters.schoolId && row.school_id !== filters.schoolId) return false;
     if (filters.documentType && row.document_type !== filters.documentType) return false;
     if (filters.status && row.status !== filters.status) return false;
+    if (filters.division && row.division !== filters.division) return false;
+    if (filters.sport && row.sport !== filters.sport) return false;
+    if (filters.gender && row.gender !== filters.gender) return false;
     if (filters.athleteQuery) {
       const q = filters.athleteQuery.trim().toLowerCase();
-      if (q && !row.athlete_name.toLowerCase().includes(q) && !row.coach_name.toLowerCase().includes(q)) return false;
+      if (q && !row.athlete_name.toLowerCase().includes(q) && !row.coach_name.toLowerCase().includes(q) && !(row.sport ?? '').toLowerCase().includes(q) && !(row.gender ?? '').toLowerCase().includes(q)) return false;
     }
     return true;
   });

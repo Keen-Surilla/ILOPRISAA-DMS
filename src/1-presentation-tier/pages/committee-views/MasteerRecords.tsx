@@ -1,6 +1,6 @@
 // src/1-presentation-tier/pages/committee-views/MasterRecords.tsx
 import { useMemo, useState } from 'react';
-import { Search, ExternalLink, Loader2, FileText } from 'lucide-react';
+import { Search, ExternalLink, Loader2, FileText, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import {
   getAllDocumentRecords,
@@ -55,6 +55,15 @@ export default function MasterRecords() {
     return options;
   }, [rows]);
 
+
+  const divisionOptions = [
+    ['elementary', 'Elementary'],
+    ['highschool', 'Secondary'],
+    ['tertiary', 'Tertiary'],
+  ] as const;
+  const sportOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.sport).filter((v): v is string => !!v))).sort(), [rows]);
+  const genderOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.gender).filter((v): v is string => !!v))).sort(), [rows]);
+
   const documentTypeOptions = useMemo(() => {
     return Array.from(new Set(rows.map((r) => r.document_type))).sort();
   }, [rows]);
@@ -79,68 +88,54 @@ export default function MasterRecords() {
     setAthleteQuery('');
   };
 
-  const hasActiveFilters = !!(filters.schoolId || filters.documentType || filters.status || athleteQuery);
+  const hasActiveFilters = !!(filters.schoolId || filters.documentType || filters.status || filters.division || filters.sport || filters.gender || athleteQuery);
+  const activeFilters = [
+    filters.schoolId && ['School', schoolOptions.find(([id]) => id === filters.schoolId)?.[1] ?? filters.schoolId],
+    filters.division && ['Level', divisionOptions.find(([id]) => id === filters.division)?.[1] ?? filters.division],
+    filters.sport && ['Sport', filters.sport],
+    filters.gender && ['Gender', filters.gender],
+    filters.documentType && ['Document', prettify(filters.documentType)],
+    filters.status && ['Status', STATUS_OPTIONS.find((s) => s.value === filters.status)?.label ?? filters.status],
+  ].filter(Boolean) as string[][];
 
   return (
     <div className="animate-in fade-in duration-300">
-      <header className="mb-6">
-        <h2 className="text-3xl font-bold tracking-tight text-slate-800">Document Records</h2>
-        <p className="text-slate-500 text-sm mt-1">
-          {filteredRows.length} of {rows.length} {rows.length === 1 ? 'document' : 'documents'}
-        </p>
+      <header className="mb-4">
+        <h2 className="text-[18px] font-bold tracking-tight text-slate-800">Document Records</h2>
+        <p className="text-slate-500 text-[11px] mt-0.5">{filteredRows.length} of {rows.length} documents</p>
       </header>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            value={athleteQuery}
-            onChange={(e) => setAthleteQuery(e.target.value)}
-            placeholder="Search athlete or coach…"
-            className="w-full pl-10 pr-3.5 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-shadow"
-          />
+      <div className="bg-white rounded-xl border border-slate-200 p-3 mb-3">
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[210px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input value={athleteQuery} onChange={(e) => setAthleteQuery(e.target.value)} placeholder="Search athlete, coach, sport, or gender…" className="w-full pl-9 pr-3 py-2 text-[11px] border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100" />
+          </div>
+          <select value={filters.schoolId ?? ''} onChange={(e) => setFilters((f) => ({ ...f, schoolId: e.target.value || undefined }))} className="px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white">
+            <option value="">All schools</option>{schoolOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <select value={filters.division ?? ''} onChange={(e) => setFilters((f) => ({ ...f, division: e.target.value || undefined }))} className="px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white">
+            <option value="">All levels</option>{divisionOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </select>
+          <select value={filters.sport ?? ''} onChange={(e) => setFilters((f) => ({ ...f, sport: e.target.value || undefined }))} className="px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white">
+            <option value="">All sports</option>{sportOptions.map((sport) => <option key={sport} value={sport}>{sport}</option>)}
+          </select>
+          <select value={filters.gender ?? ''} onChange={(e) => setFilters((f) => ({ ...f, gender: e.target.value || undefined }))} className="px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white">
+            <option value="">All genders</option>{genderOptions.map((gender) => <option key={gender} value={gender}>{gender}</option>)}
+          </select>
+          <select value={filters.documentType ?? ''} onChange={(e) => setFilters((f) => ({ ...f, documentType: e.target.value || undefined }))} className="px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white">
+            <option value="">All document types</option>{documentTypeOptions.map((type) => <option key={type} value={type}>{prettify(type)}</option>)}
+          </select>
+          <select value={filters.status ?? ''} onChange={(e) => setFilters((f) => ({ ...f, status: (e.target.value || undefined) as DocumentStatus | undefined }))} className="px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white">
+            <option value="">All statuses</option>{STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <button onClick={clearFilters} disabled={!hasActiveFilters} className="text-[10px] font-semibold text-slate-500 hover:text-slate-700 disabled:text-slate-300 px-2 py-2">Clear filters</button>
         </div>
-
-        <select
-          value={filters.schoolId ?? ''}
-          onChange={(e) => setFilters((f) => ({ ...f, schoolId: e.target.value || undefined }))}
-          className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 bg-white"
-        >
-          <option value="">All schools</option>
-          {schoolOptions.map(([id, name]) => (
-            <option key={id} value={id}>{name}</option>
-          ))}
-        </select>
-
-        <select
-          value={filters.documentType ?? ''}
-          onChange={(e) => setFilters((f) => ({ ...f, documentType: e.target.value || undefined }))}
-          className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 bg-white"
-        >
-          <option value="">All document types</option>
-          {documentTypeOptions.map((type) => (
-            <option key={type} value={type}>{prettify(type)}</option>
-          ))}
-        </select>
-
-        <select
-          value={filters.status ?? ''}
-          onChange={(e) => setFilters((f) => ({ ...f, status: (e.target.value || undefined) as DocumentStatus | undefined }))}
-          className="px-3 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-blue-500 bg-white"
-        >
-          <option value="">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
-
-               <button
-          onClick={clearFilters}
-          disabled={!hasActiveFilters}
-          className="text-xs font-bold text-slate-500 hover:text-slate-700 disabled:text-slate-300 disabled:cursor-not-allowed px-3 py-2.5"
-        >
-          Clear filters
-        </button>
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-100">
+            {activeFilters.map(([label, value]) => <button key={label} onClick={() => { const key = ({ School: 'schoolId', Level: 'division', Sport: 'sport', Gender: 'gender', Document: 'documentType', Status: 'status' } as Record<string, keyof RecordsFilters>)[label]; if (key) setFilters((f) => ({ ...f, [key]: undefined })); }} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-[9px] text-slate-600 hover:bg-slate-100">{label}: {value}<X className="w-2.5 h-2.5" /></button>)}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
