@@ -1,3 +1,4 @@
+// src/1-presentation-tier/components/ui/PhilippinePhoneInput.tsx
 import { useId } from 'react';
 
 interface PhilippinePhoneInputProps {
@@ -19,10 +20,10 @@ export function PhilippinePhoneInput({ value, onChange, required }: PhilippinePh
 
   return (
     <div>
-      <div className={`flex items-center w-full bg-white dark:bg-white/[0.05] border rounded-xl shadow-sm focus-within:bg-white dark:focus-within:bg-white/[0.06] focus-within:ring-2 focus-within:ring-sky-500/10 dark:focus-within:ring-[#7dd3fc]/10 transition-colors ${
+      <div className={`flex items-center w-full bg-white dark:bg-white/[0.05] border rounded-xl shadow-sm transition-all ${
         !isValid && value.length > 0
-          ? 'border-red-300 dark:border-red-500/40'
-          : 'border-slate-200 dark:border-white/[0.1] focus-within:border-sky-400 dark:focus-within:border-[#7dd3fc]/40'
+          ? 'border-red-300 dark:border-red-500/40 focus-within:ring-2 focus-within:ring-red-500/10 dark:focus-within:ring-red-500/10'
+          : 'border-slate-200 dark:border-white/[0.1] hover:border-blue-600 dark:hover:border-[#7dd3fc]/60 focus-within:border-blue-600 dark:focus-within:border-[#7dd3fc]/60 focus-within:ring-2 focus-within:ring-blue-600/15 dark:focus-within:ring-[#7dd3fc]/15'
       }`}>
         <span className="pl-3 pr-1 py-2.5 text-sm text-slate-500 dark:text-[#94a3b8] font-medium shrink-0">+63</span>
         <input

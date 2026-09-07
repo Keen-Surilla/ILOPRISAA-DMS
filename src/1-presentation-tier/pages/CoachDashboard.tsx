@@ -3,12 +3,11 @@ import React, { useMemo, useState, useEffect, Suspense, lazy } from 'react';
 import {
   Calendar, Users, LayoutDashboard, Settings, Clock, ClipboardCheck, Bell,
   CheckCircle2, UserCircle, FileText, Archive,
-  ShieldCheck, AlertTriangle, Search, ChevronRight, ChevronLeft, XCircle, UploadCloud, Send,
-  Sun, Moon,
+  ShieldCheck, AlertTriangle, Search, ChevronRight, ChevronLeft, XCircle, UploadCloud, Send
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
-import { useThemeStore } from '../../2-application-tier/stores/themeStore';
+import { getProfile } from '../../3-data-tier/services/profileService';
 import { teamApi } from '../../3-data-tier/api/teamApi';
 import { documentsApi, TOTAL_REQUIRED_DOCUMENTS } from '../../3-data-tier/api/documentsApi';
 import { listEvents } from '../../3-data-tier/services/eventService';
@@ -23,9 +22,13 @@ const SettingsView = lazy(() => import('./coach-views/SettingsView'));
 const ArchivedTeamView = lazy(() => import('./coach-views/ArchivedTeamView'));
 const ResourceTabs = lazy(() => import('./coach-views/ResourceTabs'));
 const CoachProfileForm = lazy(() => import('./coach-views/CoachProfileForm'));
-const ScreeningSubmissions = lazy(() => import('./coach-views/ScreeningSubmissions'));//
+const ScreeningSubmissions = lazy(() => import('./coach-views/ScreeningSubmissions'));
 
 const fontImport = "@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');";
+
+// Same DiceBear avatar builder used in Settings, so the header always matches what's saved there.
+const buildAvatarUrl = (seed: string) =>
+  `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&backgroundColor=0f766e,0891b2,0e7490`;
 
 function SkeletonBlock({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg bg-white/[0.06] ${className}`} />;
@@ -279,7 +282,6 @@ const REQUIRED_DOCUMENT_TYPES: string[] =
     ? (documentsApi as any).REQUIRED_DOCUMENT_TYPES
     : CHECKLIST_FALLBACK;
 
-// The individual document chip does NOT have the upload button anymore
 function DocumentChip({ label, status, note }: DocDetail) {
   const styles: Record<DocDetailStatus, { icon: React.ReactNode; text: string }> = {
     verified: { icon: <CheckCircle2 className="w-4 h-4" />, text: 'text-[#10b981]' },
@@ -326,7 +328,6 @@ function AttentionAthleteCard({
 
   const extra = athlete as Record<string, any>;
   
-  // Removed jersey number as requested
   const badges = [
     [extra.sport, extra.position].filter(Boolean).join(' • ') || null,
   ].filter(Boolean) as string[];
@@ -396,7 +397,6 @@ function AttentionAthleteCard({
             </span>
             <ProgressBar value={pct} colorClass={urgent ? 'bg-[#f43f5e]' : 'bg-[#f59e0b]'} />
           </div>
-          {/* Main Upload Button Restored Here */}
           <button
             onClick={onReview}
             className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3.5 py-2 rounded-full bg-blue-50 dark:bg-[#adc6ff]/15 text-blue-600 dark:text-[#adc6ff] hover:bg-blue-100 dark:hover:bg-[#adc6ff]/25 transition-colors whitespace-nowrap"
@@ -552,7 +552,6 @@ function DashboardUI() {
 
   const [docFilter, setDocFilter] = useState('all');
 
-  // When filter changes, reset to page 1
   const handleFilterChange = (key: string) => {
     setDocFilter(key);
     setCurrentPage(1);
@@ -568,8 +567,6 @@ function DashboardUI() {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [allAthletesNeedingAttention, documentDetails]);
 
-  // Committee rejections across the whole roster, as a direct action feed —
-  // "Athlete: Document Rejected - reason" — instead of a passive tracker.
   const urgentRemarks = useMemo(() => {
     const list: { athleteId: string; athleteName: string; label: string; note?: string }[] = [];
     incompleteAthleteIds.forEach((id) => {
@@ -584,9 +581,6 @@ function DashboardUI() {
     return list;
   }, [incompleteAthleteIds, documentDetails, athletes]);
 
-  // Total missing document INSTANCES per group across the whole incomplete
-  // roster (both copies count separately) — tells the coach exactly which
-  // forms to print and how many, e.g. "18 Waivers", "15 Medical Clearances".
   const bottleneckByGroup = useMemo(() => {
     const map = new Map<string, number>();
     incompleteAthleteIds.forEach((id) => {
@@ -627,7 +621,6 @@ function DashboardUI() {
     });
   }, [allAthletesNeedingAttention, documentDetails, docFilter]);
 
-  // Pagination Logic
   const totalPages = Math.ceil(filteredAttentionAthletes.length / athletesPerPage) || 1;
   const paginatedAthletes = useMemo(() => {
     const start = (currentPage - 1) * athletesPerPage;
@@ -977,7 +970,6 @@ function DashboardUI() {
 
 export default function CoachDashboard() {
   const { user } = useAuthStore();
-  const { isDark, toggleTheme } = useThemeStore();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('coachDashboardTab') || 'dashboard');
 
@@ -985,6 +977,15 @@ export default function CoachDashboard() {
     localStorage.setItem('coachDashboardTab', activeTab);
   }, [activeTab]);
 
+  // Same query key as SettingsView's ['coachProfile', user?.id] query, so when Settings
+  // saves a new/shuffled avatar_seed and invalidates that key, this refetches automatically.
+  const { data: coachProfile } = useQuery({
+    queryKey: ['coachProfile', user?.id],
+    queryFn: () => getProfile(user?.id || ''),
+    enabled: !!user?.id,
+  });
+
+  const avatarSeed = (coachProfile as any)?.avatar_seed || user?.id || 'coach';
   const profileName = user?.full_name || user?.email || 'Coach Profile';
   const profileSport = (user as Record<string, any>)?.sport || 'Coach';
 
@@ -1074,21 +1075,17 @@ export default function CoachDashboard() {
               />
             </div>
             <div className="flex items-center gap-5 shrink-0">
-              <button
-                onClick={toggleTheme}
-                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              >
-                {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
+              {/* THEME TOGGLE REMOVED FROM HERE */}
               <button className="relative w-9 h-9 rounded-full bg-white dark:bg-[#0f172a] flex items-center justify-center text-slate-500 dark:text-[#94a3b8] hover:text-slate-900 dark:hover:text-[#f8fafc] hover:bg-slate-50 dark:hover:bg-[#191f31] transition-colors">
                 <Bell className="w-[18px] h-[18px]" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white dark:ring-[#0c1324]" />
               </button>
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-600 dark:bg-[#adc6ff] flex items-center justify-center overflow-hidden shrink-0">
-                  <span className="text-white dark:text-[#00285d] font-bold text-[13px] uppercase">{profileName ? profileName.charAt(0) : 'C'}</span>
-                </div>
+                <img
+                  src={buildAvatarUrl(avatarSeed)}
+                  alt={profileName}
+                  className="w-9 h-9 rounded-full border border-slate-200 dark:border-white/[0.08] shadow-sm bg-slate-100 dark:bg-white/[0.04] object-cover shrink-0"
+                />
                 <div className="flex flex-col hidden sm:flex">
                   <span className="text-[13px] font-semibold text-slate-900 dark:text-[#f8fafc] leading-tight">{profileName}</span>
                   <span className="text-[10px] font-medium text-slate-600 dark:text-[#94a3b8] uppercase tracking-wide capitalize">{profileSport}</span>
@@ -1111,7 +1108,7 @@ export default function CoachDashboard() {
         </div>
       </PortalShell>
 
-      {/* Settings roleModal */}
+      {/* Settings Modal */}
       {isSettingsOpen && <SettingsView onClose={() => setIsSettingsOpen(false)} />}
     </>
   );

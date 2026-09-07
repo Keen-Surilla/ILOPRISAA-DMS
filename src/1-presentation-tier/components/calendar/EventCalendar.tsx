@@ -113,10 +113,28 @@ function parseDateStr(dateStr: string): Date {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+function addDays(date: Date, n: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function startOfWeek(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
+
+function isSameDate(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 export function EventCalendar({ events, isLoading, canManage, onMonthChange, onDelete, onEdit, viewMode: viewModeProp }: EventCalendarProps) {
   const today = useMemo(() => new Date(), []);
   const [year, setYear] = useState(today.getFullYear());
   const [monthIndex, setMonthIndex] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState(today);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [internalViewMode] = useState<ViewMode>('month');
@@ -131,22 +149,47 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
     onMonthChange(year, monthIndex);
   }, [year, monthIndex, onMonthChange]);
 
-  const shiftMonth = useCallback((delta: number) => {
+  // Prev/next behave differently depending on the active view: whole months
+  // in Month/List, 7 days at a time in Week, a single day in Day. Whichever
+  // way you navigate, year/monthIndex and selectedDate stay in sync so
+  // switching views mid-navigation lands somewhere sensible.
+  const shiftPeriod = useCallback((delta: number) => {
+    if (viewMode === 'week' || viewMode === 'day') {
+      const days = viewMode === 'week' ? 7 * delta : delta;
+      const next = addDays(selectedDate, days);
+      const y = clampCalendarYear(next.getFullYear());
+      if (y < minYear || y > maxYear) return;
+      setSelectedDate(next);
+      setYear(next.getFullYear());
+      setMonthIndex(next.getMonth());
+      return;
+    }
     let m = monthIndex + delta;
     let y = year;
     while (m < 0) { m += 12; y -= 1; }
     while (m > 11) { m -= 12; y += 1; }
     y = clampCalendarYear(y);
-    if (y >= minYear && y <= maxYear) { setYear(y); setMonthIndex(m); }
-  }, [monthIndex, year, minYear, maxYear]);
+    if (y >= minYear && y <= maxYear) {
+      setYear(y);
+      setMonthIndex(m);
+      setSelectedDate(new Date(y, m, 1));
+    }
+  }, [viewMode, selectedDate, monthIndex, year, minYear, maxYear]);
 
   const goToday = useCallback(() => {
     setYear(today.getFullYear());
     setMonthIndex(today.getMonth());
+    setSelectedDate(today);
   }, [today]);
 
+  const weekDays = useMemo(() => {
+    const start = startOfWeek(selectedDate);
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  }, [selectedDate]);
+
   // Events that fall within the currently displayed month, regardless of
-  // the active filter chip — used to compute the "All (N)" style counts.
+  // the active filter chip — used for the Month grid, List view, and (as a
+  // fallback) the "All (N)" style counts.
   const monthEvents = useMemo(() => {
     return events.filter((ev) => {
       if (!ev.event_date) return false;
@@ -155,17 +198,41 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
     });
   }, [events, year, monthIndex]);
 
-  const filterCounts = useMemo(() => ({
-    all: monthEvents.length,
-    event: monthEvents.filter((e) => e.type === 'event').length,
-    deadline: monthEvents.filter((e) => e.type === 'deadline').length,
-    meeting: monthEvents.filter((e) => e.type === 'meeting').length,
-  }), [monthEvents]);
+  const weekRangeEvents = useMemo(() => {
+    if (weekDays.length === 0) return [];
+    const startKey = dateKey(weekDays[0]);
+    const endKey = dateKey(weekDays[6]);
+    return events.filter((ev) => {
+      const key = ev.event_date?.slice(0, 10);
+      return !!key && key >= startKey && key <= endKey;
+    });
+  }, [events, weekDays]);
 
-  const visibleMonthEvents = useMemo(() => {
-    if (typeFilter === 'all') return monthEvents;
-    return monthEvents.filter((e) => e.type === typeFilter);
-  }, [monthEvents, typeFilter]);
+  const dayRangeEvents = useMemo(() => {
+    const key = dateKey(selectedDate);
+    return events
+      .filter((ev) => ev.event_date?.slice(0, 10) === key)
+      .sort((a, b) => (a.event_time ?? '').localeCompare(b.event_time ?? ''));
+  }, [events, selectedDate]);
+
+  // Filter chip counts reflect whichever range is currently on screen.
+  const activeScopeEvents = viewMode === 'week' ? weekRangeEvents : viewMode === 'day' ? dayRangeEvents : monthEvents;
+
+  const filterCounts = useMemo(() => ({
+    all: activeScopeEvents.length,
+    event: activeScopeEvents.filter((e) => e.type === 'event').length,
+    deadline: activeScopeEvents.filter((e) => e.type === 'deadline').length,
+    meeting: activeScopeEvents.filter((e) => e.type === 'meeting').length,
+  }), [activeScopeEvents]);
+
+  const applyTypeFilter = useCallback((list: CalendarEventRow[]) => {
+    if (typeFilter === 'all') return list;
+    return list.filter((e) => e.type === typeFilter);
+  }, [typeFilter]);
+
+  const visibleMonthEvents = useMemo(() => applyTypeFilter(monthEvents), [monthEvents, applyTypeFilter]);
+  const visibleWeekRangeEvents = useMemo(() => applyTypeFilter(weekRangeEvents), [weekRangeEvents, applyTypeFilter]);
+  const visibleDayRangeEvents = useMemo(() => applyTypeFilter(dayRangeEvents), [dayRangeEvents, applyTypeFilter]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEventRow[]>();
@@ -175,6 +242,15 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
     }
     return map;
   }, [visibleMonthEvents]);
+
+  const eventsByWeekDay = useMemo(() => {
+    const map = new Map<string, CalendarEventRow[]>();
+    for (const ev of visibleWeekRangeEvents) {
+      const key = ev.event_date?.slice(0, 10);
+      if (key) map.set(key, [...(map.get(key) ?? []), ev]);
+    }
+    return map;
+  }, [visibleWeekRangeEvents]);
 
   // For List view: same month + type-filter scope as the grid, just grouped
   // by date and flattened into an agenda instead of laid out on a calendar.
@@ -192,6 +268,21 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
     }
     return Array.from(groups.entries()).map(([dateStr, evs]) => ({ dateStr, events: evs }));
   }, [visibleMonthEvents]);
+
+  const periodLabel = useMemo(() => {
+    if (viewMode === 'week') {
+      const start = weekDays[0];
+      const end = weekDays[6];
+      const sameMonth = start.getMonth() === end.getMonth();
+      const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const endStr = end.toLocaleDateString('en-US', sameMonth ? { day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+      return `${startStr} – ${endStr}`;
+    }
+    if (viewMode === 'day') {
+      return selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    }
+    return `${MONTH_NAMES[monthIndex]} ${year}`;
+  }, [viewMode, weekDays, selectedDate, monthIndex, year]);
 
   const handleEditClick = useCallback((ev: CalendarEventRow) => {
     if (!canManage || !onEdit) return;
@@ -221,23 +312,93 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
     setDeleteTarget(null);
   }, [isDeleting]);
 
+  // Small, compact chip used inside Month/Week grid day-cells.
+  const renderCompactChip = (ev: CalendarEventRow, keyBase: string) => {
+    const visual = getCategoryVisual(ev);
+    const critical = isCriticalDeadline(ev);
+    return (
+      <div
+        key={ev.id ?? keyBase}
+        role={canManage ? 'button' : undefined}
+        tabIndex={canManage ? 0 : undefined}
+        onClick={() => handleEditClick(ev)}
+        className={`text-[10px] font-medium leading-tight px-1.5 py-1 rounded border truncate flex items-center justify-between gap-1 shadow-sm transition-transform ${
+          canManage ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'
+        } ${visual.chipClass} ${ev.status === 'Completed' ? 'opacity-60 line-through decoration-1' : ''}`}
+        title={ev.title}
+      >
+        <span className="truncate flex items-center gap-1">
+          {critical && <Lock className="w-2.5 h-2.5 shrink-0" />}
+          {ev.title}
+        </span>
+        {canManage && onDelete && (
+          <button
+            type="button"
+            onClick={(e) => handleDeleteClick(e, ev.id, ev.title)}
+            className="shrink-0 opacity-60 hover:opacity-100"
+            aria-label={`Delete ${ev.title}`}
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // Wider agenda-style row used by List view and Day view.
+  const renderAgendaRow = (ev: CalendarEventRow, keyBase: string) => {
+    const visual = getCategoryVisual(ev);
+    const critical = isCriticalDeadline(ev);
+    return (
+      <div
+        key={ev.id ?? keyBase}
+        role={canManage ? 'button' : undefined}
+        tabIndex={canManage ? 0 : undefined}
+        onClick={() => handleEditClick(ev)}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm transition-transform ${
+          canManage ? 'cursor-pointer hover:scale-[1.005]' : 'cursor-default'
+        } ${visual.chipClass} ${ev.status === 'Completed' ? 'opacity-60' : ''}`}
+      >
+        <span className={`w-2 h-2 rounded-full shrink-0 ${visual.dotClass}`} />
+        <span className="text-xs font-semibold w-16 shrink-0">{ev.event_time || '—'}</span>
+        <span className={`flex-1 min-w-0 truncate font-medium ${ev.status === 'Completed' ? 'line-through decoration-1' : ''}`}>
+          {ev.title}
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-wide shrink-0 flex items-center gap-1">
+          {critical && <Lock className="w-3 h-3" />}
+          {visual.label}
+        </span>
+        {canManage && onDelete && (
+          <button
+            type="button"
+            onClick={(e) => handleDeleteClick(e, ev.id, ev.title)}
+            className="shrink-0 opacity-60 hover:opacity-100"
+            aria-label={`Delete ${ev.title}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm dark:shadow-none overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => shiftMonth(-1)}
-            aria-label="Previous month"
+            onClick={() => shiftPeriod(-1)}
+            aria-label="Previous"
             className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 min-w-[160px] text-center">{MONTH_NAMES[monthIndex]} {year}</h3>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 min-w-[160px] text-center">{periodLabel}</h3>
           <button
             type="button"
-            onClick={() => shiftMonth(1)}
-            aria-label="Next month"
+            onClick={() => shiftPeriod(1)}
+            aria-label="Next"
             className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <ChevronRight className="w-5 h-5" />
@@ -277,7 +438,7 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
 
       {isLoading && <p className="px-6 py-3 text-sm text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">Loading events…</p>}
 
-      {viewMode === 'list' ? (
+      {viewMode === 'list' && (
         <div className="p-4 sm:p-6">
           {listGroups.length === 0 && (
             <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-10">No events match this filter for {MONTH_NAMES[monthIndex]} {year}.</p>
@@ -285,7 +446,7 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
           <div className="space-y-5">
             {listGroups.map(({ dateStr, events: dayEvents }) => {
               const date = parseDateStr(dateStr);
-              const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+              const isToday = isSameDate(date, today);
               return (
                 <div key={dateStr}>
                   <div className="flex items-center gap-2 mb-2">
@@ -297,122 +458,114 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
                     {isToday && <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">Today</span>}
                   </div>
                   <div className="space-y-1.5">
-                    {dayEvents.map((ev, idx) => {
-                      const visual = getCategoryVisual(ev);
-                      const critical = isCriticalDeadline(ev);
-                      return (
-                        <div
-                          key={ev.id ?? `${dateStr}-${idx}`}
-                          role={canManage ? 'button' : undefined}
-                          tabIndex={canManage ? 0 : undefined}
-                          onClick={() => handleEditClick(ev)}
-                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm transition-transform ${
-                            canManage ? 'cursor-pointer hover:scale-[1.005]' : 'cursor-default'
-                          } ${visual.chipClass} ${ev.status === 'Completed' ? 'opacity-60' : ''}`}
-                        >
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${visual.dotClass}`} />
-                          <span className="text-xs font-semibold w-16 shrink-0">{ev.event_time || '—'}</span>
-                          <span className={`flex-1 min-w-0 truncate font-medium ${ev.status === 'Completed' ? 'line-through decoration-1' : ''}`}>
-                            {ev.title}
-                          </span>
-                          <span className="text-[10px] font-bold uppercase tracking-wide shrink-0 flex items-center gap-1">
-                            {critical && <Lock className="w-3 h-3" />}
-                            {visual.label}
-                          </span>
-                          {canManage && onDelete && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteClick(e, ev.id, ev.title)}
-                              className="shrink-0 opacity-60 hover:opacity-100"
-                              aria-label={`Delete ${ev.title}`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {dayEvents.map((ev, idx) => renderAgendaRow(ev, `${dateStr}-${idx}`))}
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
-      ) : (
-      <div className="p-4 sm:p-6">
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
-          {WEEKDAY_NAMES.map((d) => (
-            <div key={d} className="text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase py-1">{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-          {flatDays.map((date, i) => {
-            if (!date) return <div key={`empty-${i}`} className="min-h-[90px]" />;
+      )}
 
-            const key = dateKey(date);
-            const dayEvents = eventsByDay.get(key) ?? [];
-            const hasEvents = dayEvents.length > 0;
-            const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-
-            return (
-              <div
-                key={key}
-                className={`min-h-[90px] p-1.5 rounded-lg border transition-colors ${
-                  isToday
-                    ? 'bg-blue-50/40 dark:bg-blue-500/10 border-blue-500 ring-1 ring-blue-500'
-                    : hasEvents
-                    ? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
-                    : 'bg-white dark:bg-[#0d1420] border-slate-100 dark:border-slate-800/60'
-                }`}
-              >
-                <span className={`text-xs font-semibold flex items-center justify-center w-6 h-6 rounded-md ${
-                  isToday
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : hasEvents
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}>
-                  {date.getDate()}
-                </span>
-
-                <div className="mt-1.5 space-y-1">
-                  {dayEvents.map((ev, idx) => {
-                    const visual = getCategoryVisual(ev);
-                    const critical = isCriticalDeadline(ev);
-                    return (
-                      <div
-                        key={ev.id ?? `${key}-${idx}`}
-                        role={canManage ? 'button' : undefined}
-                        tabIndex={canManage ? 0 : undefined}
-                        onClick={() => handleEditClick(ev)}
-                        className={`text-[10px] font-medium leading-tight px-1.5 py-1 rounded border truncate flex items-center justify-between gap-1 shadow-sm transition-transform ${
-                          canManage ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'
-                        } ${visual.chipClass} ${ev.status === 'Completed' ? 'opacity-60 line-through decoration-1' : ''}`}
-                        title={ev.title}
-                      >
-                        <span className="truncate flex items-center gap-1">
-                          {critical && <Lock className="w-2.5 h-2.5 shrink-0" />}
-                          {ev.title}
-                        </span>
-                        {canManage && onDelete && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteClick(e, ev.id, ev.title)}
-                            className="shrink-0 opacity-60 hover:opacity-100"
-                            aria-label={`Delete ${ev.title}`}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+      {viewMode === 'week' && (
+        <div className="p-4 sm:p-6">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+            {weekDays.map((date) => {
+              const key = dateKey(date);
+              const dayEvents = eventsByWeekDay.get(key) ?? [];
+              const hasEvents = dayEvents.length > 0;
+              const isToday = isSameDate(date, today);
+              return (
+                <div key={key} className="flex flex-col">
+                  <div className="text-center mb-1.5">
+                    <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase">
+                      {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                    </div>
+                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-sm font-bold mt-0.5 ${
+                      isToday
+                        ? 'bg-blue-600 text-white'
+                        : hasEvents
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
+                        : 'text-slate-700 dark:text-slate-300'
+                    }`}>
+                      {date.getDate()}
+                    </span>
+                  </div>
+                  <div className={`flex-1 min-h-[220px] p-1.5 rounded-lg border space-y-1 ${
+                    isToday
+                      ? 'bg-blue-50/40 dark:bg-blue-500/10 border-blue-500 ring-1 ring-blue-500'
+                      : hasEvents
+                      ? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                      : 'bg-white dark:bg-[#0d1420] border-slate-100 dark:border-slate-800/60'
+                  }`}>
+                    {dayEvents.map((ev, idx) => renderCompactChip(ev, `${key}-${idx}`))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {viewMode === 'day' && (
+        <div className="p-4 sm:p-6">
+          {visibleDayRangeEvents.length === 0 ? (
+            <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-10">
+              No events on {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {visibleDayRangeEvents.map((ev, idx) => renderAgendaRow(ev, `day-${idx}`))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === 'month' && (
+        <div className="p-4 sm:p-6">
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
+            {WEEKDAY_NAMES.map((d) => (
+              <div key={d} className="text-center text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+            {flatDays.map((date, i) => {
+              if (!date) return <div key={`empty-${i}`} className="min-h-[90px]" />;
+
+              const key = dateKey(date);
+              const dayEvents = eventsByDay.get(key) ?? [];
+              const hasEvents = dayEvents.length > 0;
+              const isToday = isSameDate(date, today);
+
+              return (
+                <div
+                  key={key}
+                  className={`min-h-[90px] p-1.5 rounded-lg border transition-colors ${
+                    isToday
+                      ? 'bg-blue-50/40 dark:bg-blue-500/10 border-blue-500 ring-1 ring-blue-500'
+                      : hasEvents
+                      ? 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                      : 'bg-white dark:bg-[#0d1420] border-slate-100 dark:border-slate-800/60'
+                  }`}
+                >
+                  <span className={`text-xs font-semibold flex items-center justify-center w-6 h-6 rounded-md ${
+                    isToday
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : hasEvents
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {date.getDate()}
+                  </span>
+
+                  <div className="mt-1.5 space-y-1">
+                    {dayEvents.map((ev, idx) => renderCompactChip(ev, `${key}-${idx}`))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-4 flex-wrap text-[11px] text-slate-500 dark:text-slate-400">

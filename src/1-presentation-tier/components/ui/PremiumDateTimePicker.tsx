@@ -69,7 +69,7 @@ export function PremiumDateTimePicker({
   value,
   onChange,
   placeholder = 'Select date...',
-  minYear = 2000,
+  minYear = 1900,
   maxYear = 2100,
   disabled,
   showTime = true,
@@ -185,34 +185,39 @@ export function PremiumDateTimePicker({
     : null;
 
   return (
-    <div ref={containerRef} className="relative w-full sm:w-auto">
-      {/* Trigger Button (Consistent Blue with White Text) */}
+    <div ref={containerRef} className="relative w-full">
+      {/* 
+        Trigger Button 
+        - Perfectly matches standard input w-full and py-2.5.
+        - Uses blue-600 on hover/focus to match the "Date" text. 
+      */}
       <button
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((o) => !o)}
-        className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-2 text-left transition-all shadow-sm bg-white border-slate-200 text-slate-800 dark:bg-[#0b1120] dark:border-slate-700 dark:text-slate-100 ${
-          isOpen ? 'border-blue-400 ring-2 ring-blue-500/20 dark:border-blue-500/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
-        } ${disabled ? 'bg-slate-100 dark:bg-slate-800 cursor-not-allowed opacity-60' : ''}`}
+        className={`w-full flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-all shadow-sm outline-none text-sm
+          ${disabled ? 'bg-slate-100 dark:bg-slate-800 cursor-not-allowed opacity-60 text-slate-500' : 'bg-white dark:bg-white/[0.05] text-slate-900 dark:text-[#f8fafc]'}
+          ${isOpen 
+            ? 'border-blue-600 ring-2 ring-blue-600/15 dark:border-[#7dd3fc]/60 dark:ring-[#7dd3fc]/15' 
+            : 'border-slate-200 dark:border-white/[0.1] hover:border-blue-600 dark:hover:border-[#7dd3fc]/60'
+          }`}
       >
-        <span className="shrink-0 flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 text-[10px] font-bold px-2.5 py-0.5">
-          <Calendar className="w-3 h-3" />
-          {label}
-        </span>
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">
-          {displayText ? (
-            <span className="truncate">{displayText}</span>
-          ) : (
-            <span className="text-slate-400 dark:text-slate-500">{placeholder}</span>
-          )}
-        </span>
-        <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 ml-1" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="shrink-0 flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2.5 py-0.5">
+            <Calendar className="w-3 h-3" />
+            {label}
+          </span>
+          <span className={`truncate ${displayText ? 'font-medium' : 'text-slate-400 dark:text-[#64748b]'}`}>
+            {displayText || placeholder}
+          </span>
+        </div>
+        <Calendar className="w-4 h-4 text-slate-400 dark:text-[#64748b] shrink-0 ml-2" />
       </button>
 
 
-{/* Dropdown Popup Card (Solid white in light mode, dark slate in dark mode) */}
-{isOpen && (
-  <div className={`absolute right-0 z-[80] mt-2 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#0b1120] shadow-2xl p-4 text-slate-900 dark:text-slate-100 ${showTime ? 'w-[380px]' : 'w-[320px]'} max-w-[92vw]`}>
+      {/* Dropdown Popup Card */}
+      {isOpen && (
+        <div className={`absolute right-0 z-[80] mt-2 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#0b1120] shadow-2xl p-4 text-slate-900 dark:text-slate-100 ${showTime ? 'w-[380px]' : 'w-[320px]'} max-w-[92vw]`}>
           <div className={`flex ${showTime ? 'gap-4' : 'flex-col gap-3'}`}>
             <div className="flex-1">
               <div className="flex items-center justify-between gap-1 mb-3">

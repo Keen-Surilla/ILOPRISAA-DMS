@@ -111,24 +111,19 @@ export default function ScheduleView() {
         </div>
 
         {/* Coaches can't add events — this used to be the "Add Event" button's
-            spot, now it holds the view-mode toggle instead. Month and List
-            are wired up; Week/Day are visual placeholders for later. */}
+            spot, now it holds the view-mode toggle instead. All four views
+            are wired up: Month, Week, Day, and List. */}
         <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 gap-0.5 self-start md:self-auto">
           {VIEW_MODE_OPTIONS.map((opt) => {
             const isActive = viewMode === opt.value;
-            const isDisabled = opt.value === 'week' || opt.value === 'day';
             return (
               <button
                 key={opt.value}
                 type="button"
-                disabled={isDisabled}
-                title={isDisabled ? `${opt.label} view is coming soon` : undefined}
                 onClick={() => setViewMode(opt.value)}
                 className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-sm'
-                    : isDisabled
-                    ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
                     : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
