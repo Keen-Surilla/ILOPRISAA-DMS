@@ -83,7 +83,7 @@ function SearchableSelect({
 
       {isOpen && (
         <div className="absolute left-0 top-[calc(100%+8px)] z-[70] w-full animate-in fade-in zoom-in-95 duration-100">
-          <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-[#0f172a] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600">
+          <div className="settings-scrollbar max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-[#0f172a]">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option) => (
                 <button
@@ -186,6 +186,40 @@ function PremiumSelect({
 /* ============================================================================
  * MAIN INVITATIONS COMPONENT
  * ========================================================================== */
+// Same neutral grey scrollbar used in SettingsView.tsx, applied here to the
+// Target Institution dropdown only, per request.
+const scrollbarStyles = `
+  .settings-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .settings-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .settings-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .settings-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .settings-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+  }
+  .dark .settings-scrollbar {
+    scrollbar-color: #475569 transparent;
+  }
+  .dark .settings-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #475569;
+  }
+  .dark .settings-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #64748b;
+  }
+`;
+
 export function InvitationsSection({ toast }: { toast: (msg: string) => void }) {
   const { user } = useAuthStore();
   const [invites, setInvites] = useState<InviteRow[]>([]);
@@ -313,9 +347,14 @@ export function InvitationsSection({ toast }: { toast: (msg: string) => void }) 
   // Filter and Pagination computation
   const filteredInvites = useMemo(() => {
     if (!selectedDate) return invites;
+    // selectedDate comes back as a full local ISO string (e.g. "2026-09-05T00:00:00")
+    // from the picker — take just the date part, and compare against each invite's
+    // created_at using local calendar date (not UTC) to avoid timezone off-by-one.
+    const selectedDateOnly = selectedDate.split('T')[0];
     return invites.filter((inv) => {
-      const invDateStr = new Date(inv.created_at).toISOString().split('T')[0];
-      return invDateStr === selectedDate;
+      const d = new Date(inv.created_at);
+      const invDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return invDateStr === selectedDateOnly;
     });
   }, [invites, selectedDate]);
 
@@ -347,6 +386,7 @@ export function InvitationsSection({ toast }: { toast: (msg: string) => void }) 
 
   return (
     <div id="invitations" className="flex flex-col gap-8 scroll-mt-24 animate-in fade-in duration-500">
+      <style>{scrollbarStyles}</style>
       
       {/* Header */}
       <div className="flex flex-col gap-2">
@@ -363,16 +403,16 @@ export function InvitationsSection({ toast }: { toast: (msg: string) => void }) 
       </div>
 
       {/* Dispatch Console */}
-      <div className="relative z-20 rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0f172a]/80 dark:shadow-xl dark:backdrop-blur-sm">
+      <div className="relative z-[15] rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0f172a]/80 dark:shadow-xl dark:backdrop-blur-sm">
         
         <div className="flex flex-col justify-between gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-start sm:p-8 dark:border-slate-700/60">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-100 bg-slate-50 text-blue-600 shadow-inner dark:border-slate-700 dark:bg-slate-800/50 dark:text-blue-400">
               <UserPlus className="h-5 w-5" />
             </div>
-            <div>
-              <h3 className="font-sora text-lg font-bold text-slate-900 dark:text-white">Account Invitation</h3>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Strict zero-public signups.</p>
+            <div className="min-w-0">
+              <h3 className="font-sora text-lg font-bold text-slate-900 dark:text-white truncate">Account Invitation</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 truncate">Strict zero-public signups.</p>
             </div>
           </div>
         </div>
@@ -461,7 +501,7 @@ export function InvitationsSection({ toast }: { toast: (msg: string) => void }) 
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Expired or revoked nonces are permanently purged from the auth gate.</p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Premium Date Picker & Always-Visible Grey-to-Red Clear Button */}
 <PremiumDateTimePicker
   label="Filter Date"
@@ -495,9 +535,11 @@ export function InvitationsSection({ toast }: { toast: (msg: string) => void }) 
     <X className="h-3.5 w-3.5" /> Clear
   </button>
 
-    <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-xs font-bold text-amber-700 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
-              {pendingCount} Pending Claims
-            </span>
+    {pendingCount > 0 && (
+      <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-xs font-bold text-amber-700 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400">
+        {pendingCount} Pending Claims
+      </span>
+    )}
 </div>
 
           
