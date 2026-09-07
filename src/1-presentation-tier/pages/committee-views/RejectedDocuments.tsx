@@ -38,7 +38,7 @@ export default function RejectedDocuments() {
   return (
     <div className="animate-in fade-in duration-300">
       <header className="mb-4">
-        <h2 className="text-[18px] font-bold tracking-tight text-slate-800">Flagged Documents</h2>
+        <h2 className="text-[22px] font-bold tracking-tight text-slate-800">Flagged Documents</h2>
         <p className="text-slate-500 text-[11px] mt-0.5">{rejectedRows.length} documents rejected, awaiting resubmission</p>
       </header>
 

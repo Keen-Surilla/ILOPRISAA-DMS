@@ -101,7 +101,7 @@ export default function MasterRecords() {
   return (
     <div className="animate-in fade-in duration-300">
       <header className="mb-4">
-        <h2 className="text-[18px] font-bold tracking-tight text-slate-800">Document Records</h2>
+        <h2 className="text-[22px] font-bold tracking-tight text-slate-800">Document Records</h2>
         <p className="text-slate-500 text-[11px] mt-0.5">{filteredRows.length} of {rows.length} documents</p>
       </header>
 
