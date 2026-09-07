@@ -480,20 +480,21 @@ export default function TeamView() {
     mutationFn: (athleteData: any) =>
       teamApi.addAthlete(athleteData),
 
-    onSuccess: () => {
+onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['teamMembers', currentUserId],
       });
-
       queryClient.invalidateQueries({
         queryKey: ['screeningRoster', currentUserId],
       });
-
       setIsModalOpen(false);
 
+      // FIX: Added sport and gender here
       setNewAthlete({
         name: '',
         email: '',
+        sport: '',
+        gender: '',
         division: '',
         year_level: '',
         date_of_birth: '',
@@ -684,13 +685,16 @@ export default function TeamView() {
     });
   };
 
-  const handleCloseAddModal = () => {
+const handleCloseAddModal = () => {
     setIsModalOpen(false);
     setErrorMessage(null);
 
+    // FIX: Added sport and gender here
     setNewAthlete({
       name: '',
       email: '',
+      sport: '',
+      gender: '',
       division: '',
       year_level: '',
       date_of_birth: '',
@@ -722,13 +726,16 @@ export default function TeamView() {
     });
   };
 
-  const handleCloseEditModal = () => {
+const handleCloseEditModal = () => {
     setAthleteToEdit(null);
     setErrorMessage(null);
 
+    // FIX: Added sport and gender here
     setEditAthlete({
       name: '',
       email: '',
+      sport: '',
+      gender: '',
       division: '',
       year_level: '',
       date_of_birth: '',

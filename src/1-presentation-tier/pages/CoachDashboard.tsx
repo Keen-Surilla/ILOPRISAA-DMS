@@ -586,7 +586,7 @@ function DashboardUI() {
     incompleteAthleteIds.forEach((id) => {
       const items = (documentDetails as Record<string, DocDetail[]>)[id] ?? [];
       items.forEach((d) => {
-        if (d.status !== 'verified') {
+        if (d.status === 'missing') {
           const key = d.group ?? d.label;
           map.set(key, (map.get(key) ?? 0) + 1);
         }
@@ -634,13 +634,6 @@ function DashboardUI() {
       {/* Header */}
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-[#4edea3]">
-              Coach Operations &amp; Eligibility
-            </span>
-            <span className="w-1 h-1 rounded-full bg-slate-200 dark:bg-[#334155]" />
-            <span className="text-[11px] font-medium text-[#64748b]">Current Season</span>
-          </div>
           <h2 className="text-[26px] font-bold tracking-tight text-slate-900 dark:text-[#f8fafc]">Overview</h2>
           <p className="text-[13px] text-slate-500 dark:text-[#94a3b8]">An at-a-glance view of your team's document readiness.</p>
         </div>

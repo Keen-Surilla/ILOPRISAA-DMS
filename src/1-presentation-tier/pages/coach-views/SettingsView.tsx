@@ -333,6 +333,11 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
   const initialLoadDone = useRef(false);
   const lastSavedData = useRef<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while the coach's cursor is inside a free-typing field (full name,
+  // team motto). While true, the debounce effect below won't schedule any
+  // save — the onBlur handlers on those fields save directly once the coach
+  // leaves the field instead.
+  const isTypingRef = useRef(false);
 
   useEffect(() => {
     if (profile) {
@@ -373,10 +378,10 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries({ queryKey: ['coachProfile', user?.id] });
       setSaveCount((prev) => {
         const nextCount = prev + 1;
-        setToast({ type: 'success', message: `Saved ('*'${nextCount})` });
+        setToast({ type: 'success', message: `Saved (x${nextCount})` });
         return nextCount;
       });
-      setTimeout(() => setToast(null), 3000);
+      setTimeout(() => setToast(null), 8000);
     },
     onError: (error: any) => {
       console.error('Profile update failed:', error);
@@ -385,8 +390,51 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     }
   });
 
+  // The one place formData actually gets saved. Shared by both the
+  // change-triggered debounce (for toggles/dropdowns/pickers, where there's
+  // no "typing" state to wait out) and the onBlur handlers on free-typing
+  // fields (full name, team motto).
+  const saveNow = () => {
+    const currentDataString = JSON.stringify(formData);
+    if (currentDataString === lastSavedData.current) return;
+
+    const {
+      avatar_seed,
+      secondary_disciplines,
+      notify_sms_missing_document,
+      notify_committee_status,
+      notify_roster_freeze,
+      ...safeDatabaseFields
+    } = formData;
+
+    const payloadToSave = {
+      ...safeDatabaseFields,
+      dob: safeDatabaseFields.dob === '' ? null : safeDatabaseFields.dob
+    };
+
+    updateMutation.mutate(payloadToSave);
+    lastSavedData.current = currentDataString;
+  };
+
+  // Called onFocus of a free-typing field: marks typing as in-progress and
+  // cancels any save that was already scheduled from a prior field change,
+  // so it can't fire mid-typing.
+  const handleTypingFocus = () => {
+    isTypingRef.current = true;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  };
+
+  // Called onBlur of a free-typing field: typing is done, save immediately.
+  const handleTypingBlur = () => {
+    isTypingRef.current = false;
+    saveNow();
+  };
+
   useEffect(() => {
     if (!initialLoadDone.current) return;
+    // A text field is currently focused — wait for its onBlur to save
+    // instead of debouncing here, so nothing saves mid-keystroke.
+    if (isTypingRef.current) return;
 
     const currentDataString = JSON.stringify(formData);
     if (currentDataString === lastSavedData.current) return;
@@ -394,22 +442,7 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
     debounceRef.current = setTimeout(() => {
-      const { 
-        avatar_seed, 
-        secondary_disciplines, 
-        notify_sms_missing_document, 
-        notify_committee_status, 
-        notify_roster_freeze, 
-        ...safeDatabaseFields 
-      } = formData;
-
-      const payloadToSave = { 
-        ...safeDatabaseFields, 
-        dob: safeDatabaseFields.dob === '' ? null : safeDatabaseFields.dob 
-      };
-
-      updateMutation.mutate(payloadToSave);
-      lastSavedData.current = currentDataString;
+      saveNow();
     }, 900);
 
     return () => {
@@ -468,7 +501,7 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
       <div className="bg-white dark:bg-[#0b1220] rounded-2xl shadow-2xl dark:shadow-black/50 border-slate-200 dark:border-white/[0.06] flex overflow-hidden h-full max-h-[750px] w-full max-w-5xl relative animate-in zoom-in-95 duration-200">
 
         {/* LEFT SIDEBAR */}
-          <div className="w-55 bg-[#0b1120] p-4 flex flex-col shrink-0">
+          <div className="w-55 bg-[#0b1120] dark:bg-[#0f172a] p-4 flex flex-col shrink-0">
             <div className="relative mb-6 mt-2">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 text-[#0b1120]" />
             <input
@@ -568,6 +601,8 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                             type="text"
                             value={formData.full_name}
                             onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                            onFocus={handleTypingFocus}
+                            onBlur={handleTypingBlur}
                             className={cn(sharedInputBase, "pl-9")}
                           />
                         </div>
@@ -592,8 +627,10 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                               onChange={(v) => setFormData({ ...formData, dob: v.split('T')[0] })}
                               showTime={false}
                               placeholder="dd/mm/yyyy"
-                              minYear={1930}
+                              minYear={1900}
                               maxYear={new Date().getFullYear()}
+                              width='full'
+                              height='h-11'
                             />
                           </div>
                         </div>
@@ -675,6 +712,8 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                         <textarea
                           value={formData.team_motto}
                           onChange={e => setFormData({ ...formData, team_motto: e.target.value })}
+                          onFocus={handleTypingFocus}
+                          onBlur={handleTypingBlur}
                           placeholder="e.g. We swim together, we win together"
                           rows={3}
                           className={cn(sharedInputBase, "pl-3 resize-none")}

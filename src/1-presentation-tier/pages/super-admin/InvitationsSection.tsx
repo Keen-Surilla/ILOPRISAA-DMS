@@ -510,7 +510,7 @@ export function InvitationsSection({ toast }: { toast: (msg: string) => void }) 
     setSelectedDate(iso);
     setCurrentPage(1);
   }}
-  placeholder="MM/DD/YY"
+  placeholder="mm/dd/yyyy"
   showTime={false} 
 />
  <button
