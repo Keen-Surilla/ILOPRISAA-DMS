@@ -478,12 +478,45 @@ export async function removeDocument(documentId: string, storagePath: string): P
 // Grouped object so callers can do `documentsApi.getX(...)` (used by CoachDashboard.tsx
 // and DocumentChecklistModal.tsx). Individual named exports above are kept for any
 // files importing them directly.
+
+/**
+ * Detailed per-athlete document counts broken down by status.
+ * Used by TeamView to derive eligibility badges and the "X Rejected" pill.
+ */
+export async function getDetailedDocumentCountsForAthletes(
+  athleteIds: string[]
+): Promise<Record<string, { verified: number; pending_review: number; action_required: number }>> {
+  if (athleteIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('athlete_id, status')
+    .in('athlete_id', athleteIds);
+
+  if (error) {
+    console.error('Error fetching detailed document counts:', error);
+    throw new Error('Could not load document counts. Please try again.');
+  }
+
+  const counts: Record<string, { verified: number; pending_review: number; action_required: number }> = {};
+  for (const row of data ?? []) {
+    if (!counts[row.athlete_id]) {
+      counts[row.athlete_id] = { verified: 0, pending_review: 0, action_required: 0 };
+    }
+    if (row.status === 'verified') counts[row.athlete_id].verified++;
+    else if (row.status === 'pending_review') counts[row.athlete_id].pending_review++;
+    else if (row.status === 'action_required') counts[row.athlete_id].action_required++;
+  }
+  return counts;
+}
+
 export const documentsApi = {
   getPendingDocuments,
   verifyDocument,
   rejectDocument,
   getSignedUrl,
   getDocumentCountsForAthletes,
+  getDetailedDocumentCountsForAthletes,
   getDocumentStatusCounts,
   getDocumentDetailsForAthletes,
   getSimplifiedDocumentChecksForAthletes,

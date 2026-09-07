@@ -23,7 +23,7 @@ const SettingsView = lazy(() => import('./coach-views/SettingsView'));
 const ArchivedTeamView = lazy(() => import('./coach-views/ArchivedTeamView'));
 const ResourceTabs = lazy(() => import('./coach-views/ResourceTabs'));
 const CoachProfileForm = lazy(() => import('./coach-views/CoachProfileForm'));
-const ScreeningSubmissions = lazy(() => import('./coach-views/ScreeningSubmissions'));
+const ScreeningSubmissions = lazy(() => import('./coach-views/ScreeningSubmissions'));//
 
 const fontImport = "@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');";
 
@@ -1111,7 +1111,7 @@ export default function CoachDashboard() {
         </div>
       </PortalShell>
 
-      {/* Settings Modal */}
+      {/* Settings roleModal */}
       {isSettingsOpen && <SettingsView onClose={() => setIsSettingsOpen(false)} />}
     </>
   );
