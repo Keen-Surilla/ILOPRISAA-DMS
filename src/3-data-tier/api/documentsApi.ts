@@ -29,9 +29,9 @@ export const DOCUMENT_CATEGORIES: DocumentCategoryGroup[] = [
     id: 'permanent',
     title: 'Permanent Documents',
     items: [
-      { type: 'birth_cert_original', label: 'Birth Certificate (Original)', category: 'permanent', group: 'Birth Certificate' },
-      { type: 'birth_cert_xerox', label: 'Birth Certificate (Xerox Copy)', category: 'permanent', group: 'Birth Certificate' },
-      { type: 'data_privacy', label: 'Data Privacy Form', category: 'permanent', group: 'Data Privacy Form' },
+      { type: 'birth_certificate_copy1', label: 'Birth Certificate (Copy 1)', category: 'permanent', group: 'Birth Certificate' },
+      { type: 'birth_certificate_copy2', label: 'Birth Certificate (Copy 2)', category: 'permanent', group: 'Birth Certificate' },
+      { type: 'data_privacy_consent', label: 'Data Privacy Consent', category: 'permanent', group: 'Data Privacy Consent' },
     ],
   },
   {
@@ -39,10 +39,10 @@ export const DOCUMENT_CATEGORIES: DocumentCategoryGroup[] = [
     title: 'Annual Documents',
     items: [
       { type: 'waiver', label: 'Waiver', category: 'annual', group: 'Waiver' },
-      { type: 'transcript_sem1', label: 'Transcript of Records (1st Sem)', category: 'annual', group: 'Transcript of Records (TOR)' },
-      { type: 'transcript_sem2', label: 'Transcript of Records (2nd Sem)', category: 'annual', group: 'Transcript of Records (TOR)' },
-      { type: 'medical_cert_1', label: 'Medical Clearance (Copy 1)', category: 'annual', group: 'Medical Clearance' },
-      { type: 'medical_cert_2', label: 'Medical Clearance (Copy 2)', category: 'annual', group: 'Medical Clearance' },
+      { type: 'tor_1st_sem', label: 'Transcript of Records (1st Sem)', category: 'annual', group: 'Transcript of Records (TOR)' },
+      { type: 'tor_2nd_sem', label: 'Transcript of Records (2nd Sem)', category: 'annual', group: 'Transcript of Records (TOR)' },
+      { type: 'medical_clearance_copy1', label: 'Medical Clearance (Copy 1)', category: 'annual', group: 'Medical Clearance' },
+      { type: 'medical_clearance_copy2', label: 'Medical Clearance (Copy 2)', category: 'annual', group: 'Medical Clearance' },
     ],
   },
 ];
@@ -221,7 +221,7 @@ export async function getDocumentStatusCounts(athleteIds: string[]): Promise<Rec
 /**
  * Per-document breakdown for each athlete, against the full 8-item checklist
  * (REQUIRED_DOCUMENTS). Used by CoachDashboard to show which specific
- * documents (e.g. "Waiver", "Birth Certificate (Original)") an athlete is
+ * documents (e.g. "Waiver", "Birth Certificate (Copy 1)") an athlete is
  * still missing, instead of just a completion percentage.
  *
  * Every required slot is always represented for every athlete:
@@ -406,6 +406,20 @@ export async function uploadDocument(
   type: DocumentType,
   file: File
 ): Promise<DocumentRow> {
+  // Upload the new file first. This prevents an existing valid document from
+  // being deleted if the new upload or database insert fails.
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `${athleteId}/${type}/${Date.now()}-${safeFileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('athlete-documents')
+    .upload(storagePath, file, { upsert: false });
+
+  if (uploadError) {
+    console.error('Error uploading file:', uploadError);
+    throw new Error(`Could not upload file: ${uploadError.message}`);
+  }
+
   const { data: existing, error: existingError } = await supabase
     .from('documents')
     .select('id, storage_path')
@@ -414,23 +428,46 @@ export async function uploadDocument(
     .maybeSingle();
 
   if (existingError) {
+    await supabase.storage.from('athlete-documents').remove([storagePath]);
     console.error('Error checking for existing document:', existingError);
-    throw new Error('Could not check for an existing file. Please try again.');
+    throw new Error(`Could not check for an existing file: ${existingError.message}`);
   }
 
   if (existing) {
-    await removeDocument(existing.id, existing.storage_path);
-  }
+    const { data, error: updateError } = await supabase
+      .from('documents')
+      .update({
+        document_category: DOCUMENT_TYPE_CATEGORY[type] ?? null,
+        original_filename: file.name,
+        mime_type: file.type,
+        file_size_bytes: file.size,
+        storage_path: storagePath,
+        status: 'pending_review',
+        rejection_reason: null,
+        reviewed_by: null,
+        reviewed_at: null,
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
 
-  const storagePath = `${athleteId}/${type}/${Date.now()}-${file.name}`;
+    if (updateError) {
+      await supabase.storage.from('athlete-documents').remove([storagePath]);
+      console.error('Error updating document record:', updateError);
+      throw new Error(`Could not save this document: ${updateError.message}`);
+    }
 
-  const { error: uploadError } = await supabase.storage
-    .from('athlete-documents')
-    .upload(storagePath, file, { upsert: false });
+    if (existing.storage_path && existing.storage_path !== storagePath) {
+      const { error: oldFileError } = await supabase.storage
+        .from('athlete-documents')
+        .remove([existing.storage_path]);
 
-  if (uploadError) {
-    console.error('Error uploading file:', uploadError);
-    throw new Error('Could not upload file. Please try again.');
+      if (oldFileError) {
+        console.warn('New document saved, but old storage file could not be removed:', oldFileError);
+      }
+    }
+
+    return data as DocumentRow;
   }
 
   const { data, error: insertError } = await supabase
@@ -449,10 +486,9 @@ export async function uploadDocument(
     .single();
 
   if (insertError) {
-    // Clean up the orphaned storage file since the row failed to save.
     await supabase.storage.from('athlete-documents').remove([storagePath]);
     console.error('Error saving document record:', insertError);
-    throw new Error('Could not save this document. Please try again.');
+    throw new Error(`Could not save this document: ${insertError.message}`);
   }
 
   return data as DocumentRow;

@@ -276,12 +276,6 @@ export default function TeamView() {
     date_of_birth: '',
   });
 
-  useEffect(() => {
-    if (profile?.sport && !newAthlete.sport) {
-      setNewAthlete((current) => ({ ...current, sport: profile.sport || '' }));
-    }
-  }, [profile?.sport, newAthlete.sport]);
-
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
@@ -309,15 +303,25 @@ export default function TeamView() {
     date_of_birth: string;
     division: string;
     year_level: string;
+    sport: string;
+    gender: string;
   } | null>(null);
 
   const [editAthlete, setEditAthlete] = useState({
     name: '',
     email: '',
+    sport: '',
+    gender: '',
     division: '',
     year_level: '',
     date_of_birth: '',
   });
+
+  useEffect(() => {
+    if (profile?.sport && !newAthlete.sport) {
+      setNewAthlete((current) => ({ ...current, sport: profile.sport || '' }));
+    }
+  }, [profile?.sport, newAthlete.sport]);
 
   const [divisionFilter, setDivisionFilter] =
     useState<(typeof DIVISION_FILTERS)[number]['key']>('all');
@@ -490,8 +494,6 @@ export default function TeamView() {
       setNewAthlete({
         name: '',
         email: '',
-        sport: profile?.sport || '',
-        gender: '',
         division: '',
         year_level: '',
         date_of_birth: '',
@@ -522,6 +524,8 @@ export default function TeamView() {
           date_of_birth: editAthlete.date_of_birth,
           division: editAthlete.division,
           year_level: editAthlete.year_level || null,
+          sport: editAthlete.sport,
+          gender: editAthlete.gender,
         }
       );
     },
@@ -540,6 +544,8 @@ export default function TeamView() {
       setEditAthlete({
         name: '',
         email: '',
+        sport: '',
+        gender: '',
         division: '',
         year_level: '',
         date_of_birth: '',
@@ -670,8 +676,6 @@ export default function TeamView() {
     addAthleteMutation.mutate({
       name: trimmedName,
       email: cleanedEmail,
-      sport: newAthlete.sport,
-      gender: newAthlete.gender,
       role: 'Athlete',
       coach_id: currentUserId,
       division: newAthlete.division,
@@ -703,11 +707,15 @@ export default function TeamView() {
       date_of_birth: member.date_of_birth ?? '',
       division: member.division ?? '',
       year_level: member.year_level ?? '',
+      sport: member.sport ?? profile?.sport ?? '',
+      gender: member.gender ?? '',
     });
 
     setEditAthlete({
       name: member.name,
       email: member.email,
+      sport: member.sport ?? profile?.sport ?? '',
+      gender: member.gender ?? '',
       date_of_birth: member.date_of_birth ?? '',
       division: member.division ?? '',
       year_level: member.year_level ?? '',
@@ -756,6 +764,20 @@ export default function TeamView() {
     if (!cleanedEmail.endsWith('@gmail.com')) {
       setErrorMessage(
         'Please use a valid Gmail address (@gmail.com).'
+      );
+      return;
+    }
+
+    if (!editAthlete.sport) {
+      setErrorMessage(
+        "The athlete's sport is required. Please set your primary sport in Settings first."
+      );
+      return;
+    }
+
+    if (!editAthlete.gender) {
+      setErrorMessage(
+        "Please select the athlete's gender."
       );
       return;
     }
@@ -1658,10 +1680,7 @@ export default function TeamView() {
                 <SexOption
                   value={newAthlete.gender}
                   onChange={(value) =>
-                    setNewAthlete({
-                      ...newAthlete,
-                      gender: value,
-                    })
+                    setNewAthlete({ ...newAthlete, gender: value })
                   }
                   options={['Male', 'Female']}
                 />
@@ -1829,6 +1848,35 @@ export default function TeamView() {
                     })
                   }
                   className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Sport
+                </label>
+                <input
+                  type="text"
+                  value={profile?.sport || editAthlete.sport || ''}
+                  readOnly
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-600 cursor-not-allowed"
+                  placeholder="Set your sport in Settings"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Automatically inherited from your coach profile.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Gender
+                </label>
+                <SexOption
+                  value={editAthlete.gender}
+                  onChange={(value) =>
+                    setEditAthlete({ ...editAthlete, gender: value })
+                  }
+                  options={['Male', 'Female']}
                 />
               </div>
 

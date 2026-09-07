@@ -1,7 +1,12 @@
 import { supabase } from '../config/SupabaseClient';
 import { findSchool } from '../constant/schools';
 
-export type DocumentStatus = 'draft' | 'pending_review' | 'verified' | 'action_required' | 'expired';
+export type DocumentStatus =
+  | 'draft'
+  | 'pending_review'
+  | 'verified'
+  | 'action_required'
+  | 'expired';
 
 export interface DocumentRecordRow {
   id: string;
@@ -27,8 +32,8 @@ export interface DocumentRecordRow {
 }
 
 export interface RecordsFilters {
-  schoolId?: string;      // canonical School.id, e.g. 'WIT'
-  athleteQuery?: string;  // free-text match on athlete/coach name
+  schoolId?: string;
+  athleteQuery?: string;
   documentType?: string;
   status?: DocumentStatus;
   division?: string;
@@ -63,7 +68,13 @@ export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
     throw new Error('Could not load athlete info. Please try again.');
   }
 
-  const coachIds = [...new Set((athletes ?? []).map((a) => a.coach_id).filter(Boolean))];
+  const coachIds = [
+    ...new Set(
+      (athletes ?? [])
+        .map((a) => a.coach_id)
+        .filter(Boolean)
+    ),
+  ];
 
   const { data: coaches, error: coachesError } = await supabase
     .from('profiles')
@@ -75,13 +86,24 @@ export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
     throw new Error('Could not load coach info. Please try again.');
   }
 
-  const athleteMap = new Map((athletes ?? []).map((a) => [a.id, a]));
-  const coachMap = new Map((coaches ?? []).map((c) => [c.id, c]));
+  const athleteMap = new Map(
+    (athletes ?? []).map((a) => [a.id, a])
+  );
+
+  const coachMap = new Map(
+    (coaches ?? []).map((c) => [c.id, c])
+  );
 
   return documents.map((doc) => {
     const athlete = athleteMap.get(doc.athlete_id);
-    const coach = athlete ? coachMap.get(athlete.coach_id) : undefined;
-    const school = findSchool(coach?.institution_id ?? null);
+    const coach = athlete
+      ? coachMap.get(athlete.coach_id)
+      : undefined;
+
+    const school = findSchool(
+      coach?.institution_id ?? null
+    );
+
     return {
       id: doc.id,
       athlete_id: doc.athlete_id,
@@ -107,18 +129,87 @@ export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
   });
 }
 
-export function applyRecordsFilters(rows: DocumentRecordRow[], filters: RecordsFilters): DocumentRecordRow[] {
+/**
+ * Returns documents that have been flagged by the committee
+ * and require action from the coach/athlete.
+ */
+export async function getActionRequiredDocuments(): Promise<
+  DocumentRecordRow[]
+> {
+  const rows = await getAllDocumentRecords();
+
+  return rows.filter(
+    (row) => row.status === 'action_required'
+  );
+}
+
+export function applyRecordsFilters(
+  rows: DocumentRecordRow[],
+  filters: RecordsFilters
+): DocumentRecordRow[] {
   return rows.filter((row) => {
-    if (filters.schoolId && row.school_id !== filters.schoolId) return false;
-    if (filters.documentType && row.document_type !== filters.documentType) return false;
-    if (filters.status && row.status !== filters.status) return false;
-    if (filters.division && row.division !== filters.division) return false;
-    if (filters.sport && row.sport !== filters.sport) return false;
-    if (filters.gender && row.gender !== filters.gender) return false;
-    if (filters.athleteQuery) {
-      const q = filters.athleteQuery.trim().toLowerCase();
-      if (q && !row.athlete_name.toLowerCase().includes(q) && !row.coach_name.toLowerCase().includes(q) && !(row.sport ?? '').toLowerCase().includes(q) && !(row.gender ?? '').toLowerCase().includes(q)) return false;
+    if (
+      filters.schoolId &&
+      row.school_id !== filters.schoolId
+    ) {
+      return false;
     }
+
+    if (
+      filters.documentType &&
+      row.document_type !== filters.documentType
+    ) {
+      return false;
+    }
+
+    if (
+      filters.status &&
+      row.status !== filters.status
+    ) {
+      return false;
+    }
+
+    if (
+      filters.division &&
+      row.division !== filters.division
+    ) {
+      return false;
+    }
+
+    if (
+      filters.sport &&
+      row.sport !== filters.sport
+    ) {
+      return false;
+    }
+
+    if (
+      filters.gender &&
+      row.gender !== filters.gender
+    ) {
+      return false;
+    }
+
+    if (filters.athleteQuery) {
+      const q = filters.athleteQuery
+        .trim()
+        .toLowerCase();
+
+      if (
+        q &&
+        !row.athlete_name.toLowerCase().includes(q) &&
+        !row.coach_name.toLowerCase().includes(q) &&
+        !(row.sport ?? '')
+          .toLowerCase()
+          .includes(q) &&
+        !(row.gender ?? '')
+          .toLowerCase()
+          .includes(q)
+      ) {
+        return false;
+      }
+    }
+
     return true;
   });
 }

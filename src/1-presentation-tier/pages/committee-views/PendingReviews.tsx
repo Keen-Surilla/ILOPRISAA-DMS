@@ -466,7 +466,7 @@ export default function PendingReviews() {
 
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-[18px] font-bold tracking-tight text-slate-800">
+              <h2 className="text-[22px] font-bold tracking-tight text-slate-800">
                 Pending Reviews
               </h2>
 
