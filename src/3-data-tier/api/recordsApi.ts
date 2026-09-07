@@ -19,10 +19,6 @@ export interface DocumentRecordRow {
   athlete_name: string;
   coach_name: string;
   institution_id: string | null;
-  // Resolved against the canonical ILOPRISAA_SCHOOLS list. Null means the
-  // stored institution_id didn't match any known school (unset, typo, or a
-  // school not yet in the list) — callers should fall back to a raw display
-  // or an "Unassigned" label rather than assume it's always populated.
   school_id: string | null;
   school_name: string | null;
 }
@@ -102,10 +98,6 @@ export async function getAllDocumentRecords(): Promise<DocumentRecordRow[]> {
   });
 }
 
-// Client-side filtering, applied after the fetch above. Fine at current data
-// volumes (tens/low hundreds of documents); if this ever needs to scale to
-// thousands of rows, move these into the .eq()/.ilike() calls on the initial
-// query instead of filtering in memory.
 export function applyRecordsFilters(rows: DocumentRecordRow[], filters: RecordsFilters): DocumentRecordRow[] {
   return rows.filter((row) => {
     if (filters.schoolId && row.school_id !== filters.schoolId) return false;

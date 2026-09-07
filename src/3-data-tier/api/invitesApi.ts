@@ -9,8 +9,14 @@ export async function createInvite(
   email: string,
   role: InviteRole,
   invitedBy: string,
-  institutionId?: string | null
+  institutionId?: string | null,
+  fullName?: string | null,
+  ttlHours?: number
 ): Promise<InviteRow> {
+  const expiresAt = ttlHours
+    ? new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString()
+    : undefined; // falls back to the DB column default (7 days) if not provided
+
   const { data, error } = await supabase
     .from('invites')
     .insert({
@@ -18,8 +24,10 @@ export async function createInvite(
       role,
       invited_by: invitedBy,
       institution_id: institutionId ?? null,
+      full_name: fullName?.trim() || null,
+      ...(expiresAt ? { expires_at: expiresAt } : {}),
     })
-    .select('id, email, role, token, status, invited_by, institution_id, expires_at, created_at, accepted_at')
+    .select('id, email, full_name, role, token, status, invited_by, institution_id, expires_at, created_at, accepted_at')
     .single();
 
   if (error) {
@@ -35,65 +43,18 @@ export async function createInvite(
 
 // Separate from createInvite so email failures don't rollback the invite record
 export async function sendInviteEmail(token: string): Promise<void> {
-  try {
-    const response = await supabase.functions.invoke('send-invite-email', {
-      body: { token },
-    });
+  const { data, error } = await supabase.functions.invoke('send-invite-email', {
+    body: { token },
+  });
 
-    // Extract error details from response
-    const { data, error } = response;
+  if (error) {
+    console.error('Error sending invite email:', error);
+    throw new Error('Invite was created, but the email could not be sent.');
+  }
 
-    if (error) {
-      console.error('Error invoking send-invite-email function:', error);
-      
-      // Try to get more details from the error
-      let errorDetails = error instanceof Error ? error.message : JSON.stringify(error);
-      
-      // If error has a context property with body, try to parse it
-      if ((error as any)?.context?.body) {
-        try {
-          const bodyText = (error as any).context.body;
-          const parsedBody = typeof bodyText === 'string' ? JSON.parse(bodyText) : bodyText;
-          if (parsedBody?.error) {
-            errorDetails = parsedBody.error;
-          }
-        } catch (parseErr) {
-          // Fallback to original error
-        }
-      }
-      
-      throw new Error(`Email service error: ${errorDetails}`);
-    }
-
-    // supabase-js only auto-parses the body when the function response has
-    // Content-Type: application/json. If that header is missing, `data`
-    // arrives here as a raw string even though the function itself succeeded.
-    let parsed = data;
-    if (typeof parsed === 'string') {
-      try {
-        parsed = JSON.parse(parsed);
-      } catch (parseErr) {
-        console.error('send-invite-email returned a non-JSON string body:', parsed);
-        throw new Error('Email service returned a malformed response');
-      }
-    }
-
-    if (parsed?.error) {
-      console.error('send-invite-email returned an error:', parsed.error);
-      throw new Error(parsed.error);
-    }
-
-    if (!parsed?.success) {
-      console.error('send-invite-email returned unexpected response:', parsed);
-      throw new Error('Email service returned an unexpected response');
-    }
-  } catch (err) {
-    console.error('Failed to send invite email:', err);
-    throw new Error(
-      err instanceof Error 
-        ? `Invite was created, but the email could not be sent: ${err.message}`
-        : 'Invite was created, but the email could not be sent.'
-    );
+  if (data?.error) {
+    console.error('send-invite-email returned an error:', data.error);
+    throw new Error(data.error);
   }
 }
 
@@ -101,7 +62,7 @@ export async function sendInviteEmail(token: string): Promise<void> {
 export async function listInvites(): Promise<InviteRow[]> {
   const { data, error } = await supabase
     .from('invites')
-    .select('id, email, role, token, status, invited_by, institution_id, expires_at, created_at, accepted_at')
+    .select('id, email, full_name, role, token, status, invited_by, institution_id, expires_at, created_at, accepted_at')
     .order('created_at', { ascending: false });
 
   if (error) {

@@ -11,6 +11,11 @@ export interface RequiredDocumentItem {
   type: DocumentType;
   label: string;
   category: 'permanent' | 'annual';
+  // Shared display name for document families that have multiple required
+  // slots (e.g. both birth certificate copies, both TOR semesters, both
+  // medical clearance copies). Used to group filter chips so "Birth
+  // Certificate" covers both copies instead of showing two separate chips.
+  group: string;
 }
 
 export interface DocumentCategoryGroup {
@@ -24,26 +29,31 @@ export const DOCUMENT_CATEGORIES: DocumentCategoryGroup[] = [
     id: 'permanent',
     title: 'Permanent Documents',
     items: [
-      { type: 'birth_certificate_copy1', label: 'Birth Certificate (Copy 1)', category: 'permanent' },
-      { type: 'birth_certificate_copy2', label: 'Birth Certificate (Copy 2)', category: 'permanent' },
-      { type: 'data_privacy_consent', label: 'Data Privacy Consent', category: 'permanent' },
+      { type: 'birth_cert_original', label: 'Birth Certificate (Original)', category: 'permanent', group: 'Birth Certificate' },
+      { type: 'birth_cert_xerox', label: 'Birth Certificate (Xerox Copy)', category: 'permanent', group: 'Birth Certificate' },
+      { type: 'data_privacy', label: 'Data Privacy Form', category: 'permanent', group: 'Data Privacy Form' },
     ],
   },
   {
     id: 'annual',
     title: 'Annual Documents',
     items: [
-      { type: 'waiver', label: 'Waiver', category: 'annual' },
-      { type: 'tor_1st_sem', label: 'Transcript of Records (1st Sem)', category: 'annual' },
-      { type: 'tor_2nd_sem', label: 'Transcript of Records (2nd Sem)', category: 'annual' },
-      { type: 'medical_clearance_copy1', label: 'Medical Clearance (Copy 1)', category: 'annual' },
-      { type: 'medical_clearance_copy2', label: 'Medical Clearance (Copy 2)', category: 'annual' },
+      { type: 'waiver', label: 'Waiver', category: 'annual', group: 'Waiver' },
+      { type: 'transcript_sem1', label: 'Transcript of Records (1st Sem)', category: 'annual', group: 'Transcript of Records (TOR)' },
+      { type: 'transcript_sem2', label: 'Transcript of Records (2nd Sem)', category: 'annual', group: 'Transcript of Records (TOR)' },
+      { type: 'medical_cert_1', label: 'Medical Clearance (Copy 1)', category: 'annual', group: 'Medical Clearance' },
+      { type: 'medical_cert_2', label: 'Medical Clearance (Copy 2)', category: 'annual', group: 'Medical Clearance' },
     ],
   },
 ];
 
 // Flat list of all 8 required document slots, derived from DOCUMENT_CATEGORIES above.
 export const REQUIRED_DOCUMENTS: RequiredDocumentItem[] = DOCUMENT_CATEGORIES.flatMap((c) => c.items);
+
+// Plain label list (no type/category), used by any UI that just needs the
+// display names of the checklist — e.g. CoachDashboard's "missing document"
+// chips fall back to this when the per-document detail query is unavailable.
+export const REQUIRED_DOCUMENT_TYPES: string[] = REQUIRED_DOCUMENTS.map((d) => d.label);
 
 // Quick lookup of permanent/annual for a given document_type, used when saving a new upload.
 const DOCUMENT_TYPE_CATEGORY: Record<string, 'permanent' | 'annual'> = Object.fromEntries(
@@ -209,6 +219,145 @@ export async function getDocumentStatusCounts(athleteIds: string[]): Promise<Rec
 }
 
 /**
+ * Per-document breakdown for each athlete, against the full 8-item checklist
+ * (REQUIRED_DOCUMENTS). Used by CoachDashboard to show which specific
+ * documents (e.g. "Waiver", "Birth Certificate (Original)") an athlete is
+ * still missing, instead of just a completion percentage.
+ *
+ * Every required slot is always represented for every athlete:
+ * - no row for that document_type          -> status: 'missing'
+ * - row with status 'verified'             -> status: 'verified'
+ * - row with status 'pending_review'       -> status: 'pending'
+ * - row with status 'action_required'      -> status: 'rejected' (+ note = rejection_reason)
+ * - row with any other status (e.g. draft/expired) -> status: 'missing' (needs re-submission)
+ */
+export type DocumentDetailStatus = 'verified' | 'pending' | 'missing' | 'rejected';
+
+export interface DocumentDetail {
+  label: string;
+  group: string;
+  status: DocumentDetailStatus;
+  note?: string;
+}
+
+function mapDocumentStatusToDetail(status: string): DocumentDetailStatus {
+  switch (status) {
+    case 'verified':
+      return 'verified';
+    case 'pending_review':
+      return 'pending';
+    case 'action_required':
+      return 'rejected';
+    default:
+      // draft, expired, or any unrecognized status: treat as still needing action.
+      return 'missing';
+  }
+}
+
+export async function getDocumentDetailsForAthletes(
+  athleteIds: string[]
+): Promise<Record<string, DocumentDetail[]>> {
+  if (athleteIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('documents')
+    .select('athlete_id, document_type, status, rejection_reason')
+    .in('athlete_id', athleteIds);
+
+  if (error) {
+    console.error('Error fetching document details:', error);
+    throw new Error("Could not load athletes' document details. Please try again.");
+  }
+
+  // athlete_id -> document_type -> { status, rejection_reason }
+  const byAthlete = new Map<string, Map<string, { status: string; rejection_reason: string | null }>>();
+  for (const row of data ?? []) {
+    if (!byAthlete.has(row.athlete_id)) byAthlete.set(row.athlete_id, new Map());
+    byAthlete.get(row.athlete_id)!.set(row.document_type, {
+      status: row.status,
+      rejection_reason: row.rejection_reason,
+    });
+  }
+
+  const result: Record<string, DocumentDetail[]> = {};
+  for (const athleteId of athleteIds) {
+    const existing = byAthlete.get(athleteId);
+    result[athleteId] = REQUIRED_DOCUMENTS.map((req) => {
+      const row = existing?.get(req.type);
+      if (!row) {
+        return { label: req.label, group: req.group, status: 'missing' as DocumentDetailStatus };
+      }
+      const status = mapDocumentStatusToDetail(row.status);
+      return {
+        label: req.label,
+        group: req.group,
+        status,
+        note: status === 'rejected' ? row.rejection_reason ?? undefined : undefined,
+      };
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Reports.tsx (the roster/screening table) only shows 3 document columns —
+ * PSA Birth Certificate, Medical, Waiver — but some of those are backed by
+ * MULTIPLE required slots (birth cert has an original + a xerox copy;
+ * medical clearance has 2 copies). This collapses each group of slots down
+ * to a single status per column, using this priority so the worst-case
+ * always wins:
+ *
+ *   rejected  — any slot in the group was sent back (needs re-submission)
+ *   missing   — the group isn't fully uploaded yet (at least one slot absent)
+ *   pending   — every slot is uploaded, at least one still awaiting review
+ *   verified  — every slot in the group has been verified
+ *
+ * This is what actually answers "did the coach upload it yet / is it
+ * pending / is it verified" — the table just renders whatever this returns.
+ */
+export interface SimplifiedDocumentCheck {
+  status: DocumentDetailStatus;
+  note?: string;
+}
+
+export interface SimplifiedDocumentChecks {
+  psa: SimplifiedDocumentCheck;
+  medical: SimplifiedDocumentCheck;
+  waiver: SimplifiedDocumentCheck;
+}
+
+const STATUS_PRIORITY: DocumentDetailStatus[] = ['rejected', 'missing', 'pending', 'verified'];
+
+function collapseGroup(items: DocumentDetail[]): SimplifiedDocumentCheck {
+  for (const level of STATUS_PRIORITY) {
+    const match = items.find((d) => d.status === level);
+    if (match) return { status: level, note: match.note };
+  }
+  return { status: 'missing' };
+}
+
+export async function getSimplifiedDocumentChecksForAthletes(
+  athleteIds: string[]
+): Promise<Record<string, SimplifiedDocumentChecks>> {
+  const details = await getDocumentDetailsForAthletes(athleteIds);
+  const result: Record<string, SimplifiedDocumentChecks> = {};
+
+  for (const athleteId of athleteIds) {
+    const items = details[athleteId] ?? [];
+    const byGroup = (groupName: string) => collapseGroup(items.filter((d) => d.group === groupName));
+
+    result[athleteId] = {
+      psa: byGroup('Birth Certificate'),
+      medical: byGroup('Medical Clearance'),
+      waiver: byGroup('Waiver'),
+    };
+  }
+
+  return result;
+}
+
+/**
  * Raw created_at timestamps for every document belonging to the given athletes.
  * Used to build the cumulative "Activity Overview" trend line.
  */
@@ -336,6 +485,8 @@ export const documentsApi = {
   getSignedUrl,
   getDocumentCountsForAthletes,
   getDocumentStatusCounts,
+  getDocumentDetailsForAthletes,
+  getSimplifiedDocumentChecksForAthletes,
   getUploadTimestamps,
   getDocumentsForAthlete,
   uploadDocument,

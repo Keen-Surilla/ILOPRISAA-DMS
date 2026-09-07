@@ -5,13 +5,12 @@ import { ProtectedRoute } from './1-presentation-tier/components/core/ProtectedR
 import { useAuthStore } from './2-application-tier/stores/authStore';
 import { supabase } from './3-data-tier/config/SupabaseClient';
 
-
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
 const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
-const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/AdminDashboard'));
+const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/SuperAdminDashboard'));
 const AcceptInvitePage = lazy(() => import('./1-presentation-tier/pages/AcceptInvitePage'));
 
 const RoleBasedRedirect = () => {
@@ -27,7 +26,8 @@ const RoleBasedRedirect = () => {
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize);
   const signOut = useAuthStore((state) => state.signOut);
-useEffect(() => {
+
+  useEffect(() => {
     initialize();
 
     const handleWindowFocus = async () => {

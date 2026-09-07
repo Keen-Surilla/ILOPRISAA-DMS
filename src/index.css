@@ -4,6 +4,9 @@
 /* 2. Import Tailwind v4 */
 @import "tailwindcss";
 
+/* OVERRIDE V4 DARK MODE: Force Tailwind to listen to the .dark HTML class */
+@variant dark (&:where(.dark, .dark *));
+
 /* 3. Define your custom theme variables */
 @theme {
   --font-sora: 'Sora', 'Inter', sans-serif;
@@ -12,9 +15,9 @@
 
   --animate-marquee-scroll: iloprisaa-marquee 34s linear infinite;
 
-  @keyframes iloprisaa-marquee {
-    0% { transform: translateX(-50%); }
-    100% { transform: translateX(0%); }
+ @keyframes iloprisaa-marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
   }
 }
 
@@ -26,4 +29,111 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 80px; 
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@400;600;700;800&display=swap');
+
+@layer base {
+  html, body { margin: 0; padding: 0; }
+  body { overscroll-behavior: none; }
+}
+
+::-webkit-scrollbar { height: 6px; width: 6px; }
+::-webkit-scrollbar-track { background: #0c1324; }
+::-webkit-scrollbar-thumb { background: #23293c; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #33394c; }
+
+:root {
+  --background: 248 250 252;
+  --surface-canvas: 238 242 247;
+  --surface-card: 255 255 255;
+  --surface-container: 241 245 249;
+  --surface-container-low: 238 242 247;
+  --surface-container-lowest: 241 245 249;
+  --surface-elevated: 255 255 255;
+  --border-subtle: 226 232 240;
+  --border-strong: 203 213 225;
+  --text-primary: 15 23 42;
+  --text-secondary: 71 85 105;
+  --text-muted: 100 116 139;
+  --on-surface: 15 23 42;
+  --primary: 47 95 219;
+  --primary-container: 47 95 219;
+  --on-primary-container: 255 255 255;
+  --status-verified: 5 150 105;
+  --status-pending: 217 119 6;
+  --status-rejected: 225 29 72;
+  --status-verified-bg: 16 185 129;
+    --status-verified-border: 16 185 129;
+    
+    --status-pending-bg: 245 158 11;
+    --status-pending-border: 245 158 11;
+    
+    --status-rejected-bg: 239 68 68;
+    --status-rejected-border: 239 68 68;
+}
+
+.dark {
+  --background: 12 19 36;
+  --surface-canvas: 2 6 23;
+  --surface-card: 15 23 42;
+  --surface-container: 25 31 49;
+  --surface-container-low: 21 27 45;
+  --surface-container-lowest: 7 13 31;
+  --surface-elevated: 30 41 59;
+  --border-subtle: 30 41 59;
+  --border-strong: 51 65 85;
+  --text-primary: 248 250 252;
+  --text-secondary: 148 163 184;
+  --text-muted: 100 116 139;
+  --on-surface: 220 225 251;
+  --primary: 173 198 255;
+  --primary-container: 77 142 255;
+  --on-primary-container: 0 40 93;
+  --status-verified: 16 185 129;
+  --status-pending: 245 158 11;
+  --status-rejected: 244 63 94;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Default/Light mode variables could go in :root, but we will force dark mode below */
+  
+  .dark {
+    /* Backgrounds & Surfaces (RGB format: R G B) */
+    --background: 10 12 16;         /* #0A0C10 */
+    --surface-canvas: 10 12 16;     /* #0A0C10 */
+    --surface-card: 17 20 24;       /* #111418 */
+    --surface-container: 28 33 40;  /* #1C2128 */
+    
+    /* Borders */
+    --border-subtle: 45 55 72;      /* #2D3748 */
+    --border-strong: 74 85 104;     /* #4A5568 */
+    
+    /* Text */
+    --text-primary: 248 250 252;    /* #F8FAFC */
+    --text-secondary: 148 163 184;  /* #94A3B8 */
+    --text-muted: 100 116 139;      /* #64748B */
+    
+    /* Brand Colors */
+    --primary: 59 130 246;          /* #3B82F6 */
+    --primary-container: 37 99 235; /* #2563EB */
+    --on-primary-container: 255 255 255;
+    
+    /* Status Colors */
+    --status-verified: 16 185 129;
+    --status-verified-bg: 16 185 129;
+    --status-verified-border: 16 185 129;
+    
+    --status-pending: 245 158 11;
+    --status-pending-bg: 245 158 11;
+    --status-pending-border: 245 158 11;
+    
+    --status-rejected: 239 68 68;
+    --status-rejected-bg: 239 68 68;
+    --status-rejected-border: 239 68 68;
+  }
 }

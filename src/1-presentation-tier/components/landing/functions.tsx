@@ -1,4 +1,4 @@
-import { Check, Upload, ClipboardCheck, Eye, ShieldCheck, GraduationCap, Dumbbell } from 'lucide-react';
+import { Check, Upload, ClipboardCheck, Eye, ShieldCheck, GraduationCap, User } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 
@@ -171,7 +171,7 @@ export const PROCESS_STEPS = [
 
 export const ROLES = [
   {
-    tier: 'Tier 01',
+    tier: '01',
     tag: 'RLS bypass guarded',
     icon: ShieldCheck,
     accent: '#3b82f6',
@@ -180,27 +180,27 @@ export const ROLES = [
     bullets: ['Provision schools & issue credentials', 'Full audit trail access', 'Invite permissions'],
   },
   {
-    tier: 'Tier 02',
+    tier: '02',
     tag: 'Institutional',
     icon: GraduationCap,
-    accent: '#38bdf8',
+    accent: '#3b82f6',
     title: 'School Admin',
     desc: "Manages one school's delegation. Verifies coach credentials, assigns rosters, and signs off on completeness before submission. ",
     bullets: ['Manage delegation roster', ' Assign & supervise coaches', 'Export official roster'],
   },
   {
-    tier: 'Tier 03',
+    tier: '03',
     tag: 'Review board',
     icon: ClipboardCheck,
-    accent: '#22d3ee',
+    accent: '#3b82f6',
     title: 'Committee',
     desc: 'Runs document review across four tabs — Pending, Master Records, Action Required, Compliance Overview — and rules on every submission.',
     bullets: ['Review across four tabs', 'Approve or reject documents', 'Require a reason on every rejection'],
   },
   {
-    tier: 'Tier 04',
+    tier: '04',
     tag: 'Dossier builder',
-    icon: Dumbbell,
+    icon: User,
     accent: '#3b82f6',
     title: 'Coach',
     desc: "Builds each athlete's dossier, birth certificates, medical clearances, transcripts, and manages secure, time-limited access to it." ,
@@ -229,7 +229,7 @@ export const STATE_MACHINE_STATES = [
     highlight: true,
   },
   {
-    step: 'State 03 (branch)',
+    step: 'State 03',
     accent: '#22d3ee',
     title: 'Decision gate',
     status: 'verified | rejected',
@@ -257,13 +257,13 @@ export const TRANSITIONS = [
 ] as const;
 
 export const SCHOOLS = [
-  { code: 'CPU', name: 'Central Philippine University', mascot: 'Golden Lions' },
-  { code: 'SAN AG', name: 'University of San Agustin', mascot: 'Golden Eagles' },
-  { code: 'JOHN B', name: 'John B. Lacson Maritime', mascot: 'Dolphins' },
-  { code: 'WIT', name: 'Western Institute of Technology', mascot: 'Wildcats' },
-  { code: 'DOCTORS', name: "Iloilo Doctors' College", mascot: 'Medics' },
+  { code: 'CPU', name: 'Central Philippine University', mascot: 'Centralians' },
+  { code: 'SAN AG', name: 'University of San Agustin', mascot: 'Agustinians' },
+  { code: 'JOHN B', name: 'John B. Lacson Maritime', mascot: 'Lacsonians' },
+  { code: 'WIT', name: 'Western Institute of Technology', mascot: 'Wittians' },
+  { code: 'DOCTORS', name: "Iloilo Doctors' College", mascot: 'IDCians' },
   { code: 'ST. PAUL', name: 'St. Paul University Iloilo', mascot: 'Paulinians' },
-  { code: 'UI', name: 'PHINMA University of Iloilo', mascot: 'PHINMA Wildcats' },
+  { code: 'UI', name: 'PHINMA University of Iloilo', mascot: 'PHINMANIANS' },
   { code: 'HUA SIONG', name: 'Hua Siong College', mascot: 'Red Phoenix' },
   { code: 'SAGRADO', name: 'Colegio del Sagrado Corazon', mascot: 'Sagradistas' },
   { code: 'SJI', name: 'Sun Yat Sen High School', mascot: 'Golden Dragons' },
@@ -295,10 +295,11 @@ export function smoothScrollTo(targetId: string, customOffset?: number) {
   const sectionOffsets: Record<string, number> = {
     'institutions': 200, 
     'how-it-works': 80, 
+    'home': 75,
   };
 
 
-  const headerOffset = customOffset ?? sectionOffsets[targetId] ?? 5;
+  const headerOffset = customOffset ?? sectionOffsets[targetId] ?? 0;
 
   const elementPosition = targetElement.getBoundingClientRect().top;
   const startingY = window.pageYOffset;

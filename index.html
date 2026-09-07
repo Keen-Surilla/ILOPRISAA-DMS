@@ -1,10 +1,35 @@
 <!doctype html>
 <html lang="en">
-  <head>
+    <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>iloprisaa-document-management-system</title>
+    <script>
+      (function () {
+        try {
+          var STORAGE_KEY = 'iloprisaa_theme';
+          var MANUAL_KEY = 'iloprisaa_theme_manual';
+          var isManual = localStorage.getItem(MANUAL_KEY) === 'true';
+          var saved = localStorage.getItem(STORAGE_KEY);
+          var theme;
+          if (isManual && (saved === 'light' || saved === 'dark')) {
+            theme = saved;
+          } else {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          var root = document.documentElement;
+          if (theme === 'dark') {
+            root.classList.add('dark');
+          } else {
+            root.classList.add('light');
+          }
+        } catch (e) {
+          // localStorage/matchMedia unavailable (e.g. privacy mode) — fall back to dark
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

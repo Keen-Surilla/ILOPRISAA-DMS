@@ -97,6 +97,33 @@ serve(async (req) => {
       });
     }
 
+    // Check for an existing registered account before attempting the invite.
+    // inviteUserByEmail rejects already-registered emails with an opaque error,
+    // so we surface a clear message instead of letting that turn into a generic 500.
+    const { data: existingUsers, error: listUsersError } = await adminClient.auth.admin.listUsers();
+
+    if (listUsersError) {
+      console.error("Error checking existing users:", listUsersError);
+      return new Response(JSON.stringify({ error: "Could not verify account status. Please try again." }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+
+    const existingUser = existingUsers.users.find(
+      (u) => u.email?.toLowerCase() === invite.email.toLowerCase()
+    );
+
+    if (existingUser) {
+      console.error(`Email ${invite.email} is already registered (user id: ${existingUser.id}).`);
+      return new Response(
+        JSON.stringify({
+          error: `This email (${invite.email}) is already registered to an existing account. It cannot be invited again — the account holder should log in directly, or contact an admin if this is a mistake.`,
+        }),
+        { status: 409, headers: corsHeaders }
+      );
+    }
+
     const { error: sendError } = await adminClient.auth.admin.inviteUserByEmail(invite.email, {
       data: {
         role: invite.role,

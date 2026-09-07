@@ -1,34 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Clock, FileText, X, AlertTriangle } from 'lucide-react';
+import { Clock, FileText, AlertTriangle } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
-import { listEvents, createEvent, updateEvent, deleteEvent, type CalendarEventRow } from '../../../3-data-tier/services/eventService';
-import { EventCalendar } from '../../components/calendar/EventCalendar';
-import { PremiumDateTimePicker } from '../../components/ui/PremiumDateTimePicker';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
-type UIEventType = 'event' | 'meeting' | 'deadline';
-
-interface EventFormState {
-  title: string;
-  date: string;
-  time: string;
-  type: UIEventType;
-  status: 'Pending' | 'Completed';
-}
-
-const EMPTY_FORM: EventFormState = { title: '', date: '', time: '', type: 'event', status: 'Pending' };
-
-const EVENT_TYPE_OPTIONS: { value: UIEventType; label: string }[] = [
-  { value: 'event', label: 'General Event' },
-  { value: 'meeting', label: 'Meeting' },
-  { value: 'deadline', label: 'Deadline' },
-];
-
-const ACTIVE_PILL_STYLE = "bg-blue-50 text-blue-700 border-blue-600 shadow-sm ring-1 ring-blue-600";
-const INACTIVE_PILL_STYLE = "bg-white text-slate-500 border-slate-200 hover:bg-slate-50";
+import { listEvents, type CalendarEventRow } from '../../../3-data-tier/services/eventService';
+import { EventCalendar, VIEW_MODE_OPTIONS, type ViewMode } from '../../components/calendar/EventCalendar';
+import { useQuery } from '@tanstack/react-query';
 
 const SIDEBAR_LIST_LIMIT = 5;
-
+const CRITICAL_DEADLINE_DAYS = 3;
 
 function parseLocalDate(dateStr?: string | null): Date {
   if (!dateStr) return new Date();
@@ -37,170 +15,37 @@ function parseLocalDate(dateStr?: string | null): Date {
   return new Date(year, month - 1, day);
 }
 
+function daysUntil(dateStr?: string | null): number {
+  if (!dateStr) return Infinity;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return Math.round((parseLocalDate(dateStr).getTime() - startOfToday.getTime()) / 86_400_000);
+}
+
+// Coaches are view-only here: PRISAA/admin owns event creation. See the
+// EventCalendar usage below — canManage is always false, and there is no
+// add/edit modal in this file at all.
+//
+// NOTE: making admin-created events actually show up for a coach still
+// needs a backend change. `listEvents({ userId })` currently filters by
+// `user_id = eq.<coachId>` (events a coach owns), not by "events visible to
+// this coach's school." Until that query (and its RLS policy) filters by
+// school/target audience instead of literal ownership, this view will only
+// ever show events the coach's own account created — which, once nobody
+// can create from this screen, may end up empty. Flag for backend work.
 export default function ScheduleView() {
   const authStore = useAuthStore();
   const user = authStore?.user;
   const userId = user?.id;
-  const queryClient = useQueryClient();
-
 
   const { data: events = [], isLoading, error: fetchError } = useQuery({
     queryKey: ['events', userId],
     queryFn: () => listEvents({ userId }),
-    enabled: !!userId,   
-    staleTime: 30_000,   
+    enabled: !!userId,
+    staleTime: 30_000,
   });
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [newEvent, setNewEvent] = useState<EventFormState>(EMPTY_FORM);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [resolveDeleteConfirm, setResolveDeleteConfirm] = useState<((confirmed: boolean) => void) | null>(null);
-
- const saveEventMutation = useMutation({
-  mutationFn: async ({ eventData, id }: { eventData: EventFormState; id: string | null }) => {
-    if (!userId) {
-      throw new Error('You must be signed in to save an event. Please refresh and try again.');
-    }
-
-    const payload = {
-      title: eventData.title,
-      event_date: eventData.date,
-      event_time: eventData.time,
-      type: eventData.type,
-      status: eventData.status,
-    };
-
-    if (id) {
-      return await updateEvent(id, userId, payload);
-    }
-    return await createEvent({ ...payload, user_id: userId });
-  },
-  onMutate: async ({ eventData, id }) => {
-    await queryClient.cancelQueries({ queryKey: ['events', userId] });
-    const previousEvents = queryClient.getQueryData(['events', userId]);
-    queryClient.setQueryData(['events', userId], (old: any) => {
-      const patch = {
-        title: eventData.title,
-        event_date: eventData.date,
-        event_time: eventData.time,
-        type: eventData.type,
-        status: eventData.status,
-        user_id: userId
-      };
-      if (id) {
-        // Preserve existing fields during optimistic update
-        return old?.map((e: any) => e.id === id ? { ...e, ...patch } : e);
-      } else {
-        return [...(old || []), { id: `temp-${Date.now()}`, ...patch }];
-      }
-    });
-    setIsModalOpen(false);
-    setEditingId(null);
-    setNewEvent(EMPTY_FORM);
-    return { previousEvents };
-  },
-  onError: (error: any, _newTodo, context) => {
-    if (context?.previousEvents) {
-      queryClient.setQueryData(['events', userId], context.previousEvents);
-    }
-    setErrorMessage(error?.message || "The database was too slow. Event didn't save.");
-    setIsModalOpen(true);
-  },
-  onSettled: () => {
-    queryClient.invalidateQueries({ queryKey: ['events', userId] });
-  }
-});
-
-  const deleteEventMutation = useMutation({
-    mutationFn: (id: string) => {
-      if (!userId) {
-        throw new Error('You must be signed in to delete an event.');
-      }
-      return deleteEvent(id, userId);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['events', userId] });
-    },
-    onError: (error: any) => {
-      setErrorMessage(error?.message || "Couldn't delete that event. Please try again.");
-    }
-  });
-
-  const handleOpenNew = () => {
-    if (!userId) {
-      setErrorMessage('You must be signed in to add an event.');
-      return;
-    }
-    setEditingId(null);
-    setNewEvent(EMPTY_FORM);
-    setErrorMessage(null);
-    setIsModalOpen(true);
-  };
-
-  function toUIEventType(value: string): UIEventType {
-  return (EVENT_TYPE_OPTIONS.some(opt => opt.value === value) ? value : 'event') as UIEventType;
-}
-
-   function toUIStatus(value: string): 'Pending' | 'Completed' {
-  return value === 'Completed' ? 'Completed' : 'Pending';
-}
-
-const handleEditEvent = (eventToEdit: CalendarEventRow) => {
-  setEditingId(eventToEdit.id);
-  setNewEvent({
-    title: eventToEdit.title,
-    date: eventToEdit.event_date,
-    time: eventToEdit.event_time,
-    type: toUIEventType(eventToEdit.type),
-    status: toUIStatus(eventToEdit.status)
-  });
-  setErrorMessage(null);
-  setIsModalOpen(true);
-};
-
-
-  const handleSaveEvent = (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!newEvent.date || !newEvent.time) {
-    setErrorMessage('Please select a date and time.');
-    return;
-  }
-  setErrorMessage(null);
-  saveEventMutation.mutate({ eventData: newEvent, id: editingId });
-};
-
-  // Combines the form's separate date/time strings into the local ISO value
-  // the picker expects, and splits the picker's output back into those fields.
-  const combinedDateTime = newEvent.date ? `${newEvent.date}T${newEvent.time || '00:00'}:00` : null;
-
-  const handleDateTimeChange = (isoLocal: string) => {
-    const [datePart, timePart] = isoLocal.split('T');
-    setNewEvent(prev => ({ ...prev, date: datePart, time: (timePart || '00:00').slice(0, 5) }));
-  };
-
-  const handleDeleteFromCalendar = async (eventId: string): Promise<boolean> => {
-    setPendingDeleteId(eventId);
-    const confirmed = await new Promise<boolean>((resolve) => {
-      setResolveDeleteConfirm(() => resolve);
-    });
-    setPendingDeleteId(null);
-    setResolveDeleteConfirm(null);
-
-    if (!confirmed) return false;
-
-    try {
-      await deleteEventMutation.mutateAsync(eventId);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const eventPendingDelete = pendingDeleteId
-    ? events.find((e: any) => e.id === pendingDeleteId)
-    : null;
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
 
   const [showAllEvents, setShowAllEvents] = useState(false);
   const [showAllDeadlines, setShowAllDeadlines] = useState(false);
@@ -221,88 +66,121 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
   const visibleEvents = showAllEvents ? upcomingEvents : upcomingEvents.slice(0, SIDEBAR_LIST_LIMIT);
   const visibleDeadlines = showAllDeadlines ? upcomingDeadlines : upcomingDeadlines.slice(0, SIDEBAR_LIST_LIMIT);
 
+  // The nearest upcoming deadline gets the "critical" progress-bar treatment
+  // once it's within CRITICAL_DEADLINE_DAYS; the bar itself is a simple
+  // days-remaining urgency indicator (no roster/profile-count data exists
+  // on `events` to reproduce anything more specific).
+  const criticalDeadline = upcomingDeadlines.find((d: any) => daysUntil(d?.event_date) <= CRITICAL_DEADLINE_DAYS) ?? null;
+  const otherDeadlines = visibleDeadlines.filter((d: any) => d.id !== criticalDeadline?.id);
+
+  // Assumes an Aug–May PRISAA school-year season; adjust if your actual
+  // season boundary differs.
+  const today = new Date();
+  const seasonStartYear = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
+  const seasonLabel = `Season ${seasonStartYear}-${seasonStartYear + 1}`;
+
   if (isLoading) {
     return (
       <div className="space-y-6 animate-pulse">
         <header className="flex justify-between items-end">
-          <div className="h-8 bg-slate-200 rounded-md w-48"></div>
-          <div className="h-10 w-36 bg-slate-200 rounded-md"></div>
+          <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-md w-48"></div>
+          <div className="h-10 w-56 bg-slate-200 dark:bg-slate-800 rounded-md"></div>
         </header>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white rounded-xl h-[500px] border border-slate-200"></div>
-          <div className="lg:col-span-1 bg-white rounded-xl h-64 border border-slate-200"></div>
+          <div className="lg:col-span-2 bg-white dark:bg-[#111827] rounded-xl h-[500px] border border-slate-200 dark:border-slate-800"></div>
+          <div className="lg:col-span-1 bg-white dark:bg-[#111827] rounded-xl h-64 border border-slate-200 dark:border-slate-800"></div>
         </div>
       </div>
     );
   }
-
-  const activePillStyle = ACTIVE_PILL_STYLE;
-  const inactivePillStyle = INACTIVE_PILL_STYLE;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
 
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-800">Your Schedule</h2>
-          <p className="text-slate-500 text-sm mt-1">Manage your events, games, and document deadlines.</p>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-100">Your Schedule &amp; Calendar</h2>
+            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold dark:bg-blue-500/10 dark:text-blue-300">
+              {seasonLabel}
+            </span>
+          </div>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+            Matches, practices, and screening deadlines set by PRISAA for your team.
+          </p>
         </div>
-        <button
-          onClick={handleOpenNew}
-          disabled={!userId}
-         className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 disabled:opacity-50 disabled:cursor-not-allowed px-5 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-sm"       >
-          Add Event
-        </button>
+
+        {/* Coaches can't add events — this used to be the "Add Event" button's
+            spot, now it holds the view-mode toggle instead. Month and List
+            are wired up; Week/Day are visual placeholders for later. */}
+        <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 gap-0.5 self-start md:self-auto">
+          {VIEW_MODE_OPTIONS.map((opt) => {
+            const isActive = viewMode === opt.value;
+            const isDisabled = opt.value === 'week' || opt.value === 'day';
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={isDisabled}
+                title={isDisabled ? `${opt.label} view is coming soon` : undefined}
+                onClick={() => setViewMode(opt.value)}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : isDisabled
+                    ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       {!userId && (
-        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg">
+        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded-lg dark:bg-amber-500/10 dark:border-amber-500/30 dark:text-amber-300">
           <AlertTriangle className="w-4 h-4 shrink-0" />
-          Your session isn't fully loaded yet, so events can't be added or edited right now. Try refreshing the page.
+          Your session isn't fully loaded yet, so your schedule can't load right now. Try refreshing the page.
         </div>
       )}
 
-      {/* ✅ ADDED: The UI Banner that instantly shows you if the database blocks the fetch! */}
       {fetchError && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium rounded-lg">
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 text-sm font-medium rounded-lg dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-300">
           <AlertTriangle className="w-5 h-5 shrink-0" />
           Failed to load calendar events: {fetchError instanceof Error ? fetchError.message : String(fetchError)}
         </div>
       )}
 
-      {errorMessage && !isModalOpen && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg">
-          {errorMessage}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="lg:col-span-2">
           <EventCalendar
             events={events}
             isLoading={isLoading}
             onMonthChange={(_y, _m) => {}}
-            canManage={!!userId}
-            onDelete={handleDeleteFromCalendar}
-            onEdit={handleEditEvent}
+            canManage={false}
+            viewMode={viewMode}
           />
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Events</h3>
-            <ul className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
-              {upcomingEvents.length === 0 && <p className="text-xs text-slate-400">No upcoming events.</p>}
+          <div className="bg-white dark:bg-[#111827] rounded-xl shadow-sm dark:shadow-none border border-slate-200 dark:border-slate-800 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Upcoming Events</h3>
+              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">All ({upcomingEvents.length})</span>
+            </div>
+            <ul className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+              {upcomingEvents.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500">No upcoming matches.</p>}
               {visibleEvents.map((evt: any) => {
                 const startDate = parseLocalDate(evt?.event_date);
                 return (
                 <li
                   key={evt.id}
-                  className="flex gap-4 items-start p-2 rounded-lg -ml-2 hover:bg-slate-50 cursor-pointer transition-colors"
-                  onClick={() => handleEditEvent(evt)}
+                  className="flex gap-3 items-start p-2.5 rounded-lg border-l-2 border-blue-500 bg-slate-50 dark:bg-slate-900/40"
                 >
-                  <div className="bg-[#0f172a] text-white rounded-md w-11 h-11 flex flex-col items-center justify-center shrink-0">
+                  <div className="bg-[#0f172a] dark:bg-slate-800 text-white rounded-md w-11 h-11 flex flex-col items-center justify-center shrink-0">
                     <span className="text-[9px] font-semibold uppercase text-slate-300">
                       {startDate.toLocaleString('en-US', { month: 'short' })}
                     </span>
@@ -310,11 +188,14 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
                       {startDate.getDate()}
                     </span>
                   </div>
-                  <div className="flex-1">
-                    <h4 className="text-xs font-bold text-slate-700">{evt?.title}</h4>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{evt?.title}</h4>
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                       <Clock className="w-3 h-3" /> {evt?.event_time}
                     </div>
+                    <span className="inline-block mt-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                      {evt?.status === 'Completed' ? 'Completed' : 'Official Match'}
+                    </span>
                   </div>
                 </li>
               )})}
@@ -323,40 +204,73 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
               <button
                 type="button"
                 onClick={() => setShowAllEvents(v => !v)}
-                className="mt-3 text-xs font-bold text-blue-600 hover:text-blue-700"
+                className="mt-3 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 {showAllEvents ? 'Show less' : `See all (${upcomingEvents.length})`}
               </button>
             )}
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h3 className="font-bold text-slate-800 text-sm mb-5">Upcoming Deadlines</h3>
-            <ul className="space-y-4 max-h-[250px] overflow-y-auto pr-2">
-              {upcomingDeadlines.length === 0 && <p className="text-xs text-slate-400">No deadlines.</p>}
-              {visibleDeadlines.map((deadline: any) => {
-                 const startDate = parseLocalDate(deadline?.event_date);
-                 return (
+          <div className="bg-white dark:bg-[#111827] rounded-xl shadow-sm dark:shadow-none border border-slate-200 dark:border-slate-800 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Screening Deadlines</h3>
+              {criticalDeadline && (
+                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300 text-[10px] font-bold">
+                  CRITICAL
+                </span>
+              )}
+            </div>
+
+            {upcomingDeadlines.length === 0 && <p className="text-xs text-slate-400 dark:text-slate-500">No deadlines coming up.</p>}
+
+            {criticalDeadline && (() => {
+              const remaining = Math.max(daysUntil(criticalDeadline.event_date), 0);
+              const dueDate = parseLocalDate(criticalDeadline.event_date);
+              const pct = Math.min(100, Math.max(6, Math.round((1 - remaining / CRITICAL_DEADLINE_DAYS) * 100)));
+              return (
+                <div className="mb-4 p-3 rounded-lg border border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-xs font-bold text-red-800 dark:text-red-300 truncate">{criticalDeadline.title}</h4>
+                        <span className="shrink-0 text-[10px] font-bold text-red-700 dark:text-red-300">
+                          {remaining <= 0 ? 'Due today' : `In ${remaining} day${remaining === 1 ? '' : 's'}`}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-red-700/80 dark:text-red-300/80 mt-1">
+                        Due {dueDate.toLocaleDateString()} at {criticalDeadline.event_time}.
+                      </p>
+                      <div className="mt-2 h-1.5 w-full rounded-full bg-red-200 dark:bg-red-900/50 overflow-hidden">
+                        <div className="h-full rounded-full bg-red-600 dark:bg-red-400" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <ul className="space-y-1">
+              {otherDeadlines.map((deadline: any) => (
                 <li
                   key={deadline.id}
-                  className="flex flex-col gap-1 p-2 rounded-lg -ml-2 hover:bg-slate-50 cursor-pointer transition-colors"
-                  onClick={() => handleEditEvent(deadline)}
+                  className="flex items-center gap-3 p-2 rounded-lg"
                 >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-4 h-4 text-slate-400" />
-                    <span className="text-xs font-medium text-slate-700 truncate max-w-[120px]">{deadline?.title}</span>
+                  <FileText className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-xs font-medium text-slate-700 dark:text-slate-200 truncate">{deadline?.title}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-500">
+                      Due: {parseLocalDate(deadline?.event_date).toLocaleDateString()}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-slate-500 ml-7">
-                    Due: {startDate.toLocaleDateString()} at {deadline?.event_time}
-                  </span>
                 </li>
-              )})}
+              ))}
             </ul>
             {upcomingDeadlines.length > SIDEBAR_LIST_LIMIT && (
               <button
                 type="button"
                 onClick={() => setShowAllDeadlines(v => !v)}
-                className="mt-3 text-xs font-bold text-blue-600 hover:text-blue-700"
+                className="mt-3 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
               >
                 {showAllDeadlines ? 'Show less' : `See all (${upcomingDeadlines.length})`}
               </button>
@@ -365,107 +279,6 @@ const handleEditEvent = (eventToEdit: CalendarEventRow) => {
         </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex justify-between items-center p-6 border-b border-slate-100">
-              <h3 className="font-bold text-lg text-slate-800">{editingId ? 'Edit Event' : 'Add New Event'}</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
-            </div>
-
-            <form onSubmit={handleSaveEvent} className="p-6 space-y-4">
-              {errorMessage && (
-                <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg">
-                  {errorMessage}
-                </div>
-              )}
-
-              <div>
-                <label className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
-                  <span>Title</span>
-                  <span className={newEvent.title.length > 100 ? 'text-amber-600' : 'text-slate-400'}>
-                    {newEvent.title.length}/120
-                  </span>
-                </label>
-                <input type="text" required maxLength={120} value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-600" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Date &amp; Time</label>
-                <PremiumDateTimePicker
-                  value={combinedDateTime}
-                  onChange={handleDateTimeChange}
-                  placeholder="Select date & time"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2">Event Type</label>
-                <div className="flex flex-wrap gap-2">
-                  {EVENT_TYPE_OPTIONS.map(opt => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setNewEvent({ ...newEvent, type: opt.value })}
-                      className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${
-                        newEvent.type === opt.value ? activePillStyle : inactivePillStyle
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-4 flex gap-3 justify-end items-center border-t border-slate-100 mt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                <button
-                  type="submit"
-                  disabled={saveEventMutation.isPending}
-                  className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg shadow-md shadow-blue-600/20"
-                >
-                  {saveEventMutation.isPending ? 'Saving…' : (editingId ? 'Update Schedule' : 'Save Schedule')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {pendingDeleteId && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-            <div className="p-6 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                </div>
-                <h3 className="font-bold text-slate-800 text-sm">Delete this event?</h3>
-              </div>
-              <p className="text-xs text-slate-500">
-                {eventPendingDelete?.title ? `"${eventPendingDelete.title}"` : 'This event'} will be permanently removed. This can't be undone.
-              </p>
-            </div>
-            <div className="px-6 pb-6 flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={() => resolveDeleteConfirm?.(false)}
-                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => resolveDeleteConfirm?.(true)}
-                disabled={deleteEventMutation.isPending}
-                className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg shadow-md shadow-red-600/20"
-              >
-                {deleteEventMutation.isPending ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

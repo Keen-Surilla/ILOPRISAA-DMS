@@ -14,10 +14,10 @@ export function SexOption({
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`flex-1 px-4 py-2 text-sm font-medium rounded-md border transition-colors ${
+          className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-xl border shadow-sm transition-colors ${
             value === opt
-              ? 'bg-blue-50 text-blue-700 border-blue-600'
-              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              ? 'bg-sky-50 dark:bg-[#7dd3fc]/10 text-sky-700 dark:text-[#7dd3fc] border-sky-400 dark:border-[#7dd3fc]/40'
+              : 'bg-white dark:bg-white/[0.05] text-slate-600 dark:text-[#94a3b8] border-slate-200 dark:border-white/[0.1] hover:bg-slate-50 dark:hover:bg-white/[0.08]'
           }`}
         >
           {opt}

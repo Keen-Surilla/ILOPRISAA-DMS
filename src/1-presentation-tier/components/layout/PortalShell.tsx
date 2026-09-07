@@ -3,11 +3,10 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import type { UserRole } from '../../../3-data-tier/types/database.types.extras';
-import Logo2 from "../../../assets/logo2.svg";
+import Logo2 from "../../../assets/Frame 100.svg";
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PanelLeft, LogOut } from 'lucide-react';
 
-// PortalShell.tsx
 export interface NavItem {
   id: string;
   label: string;
@@ -17,14 +16,14 @@ export interface NavItem {
 }
 
 export interface NavGroup {
-  label: string | null; // null = ungrouped, renders with no header (e.g. Dashboard)
+  label: string | null; 
   items: NavItem[];
 }
 
 interface PortalShellProps {
   portalTitle: string;
   user?: any;
-  navGroups: NavGroup[]; // replaces the old flat `navItems` prop
+  navGroups: NavGroup[]; 
   children: ReactNode;
 }
 
@@ -50,17 +49,30 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
   };
 
   return (
-    <div className="flex flex-row h-screen w-full bg-slate-50 overflow-hidden">
+    <div className="relative flex flex-row h-screen w-full overflow-hidden">
+      
+      {/* MOBILE BACKDROP: Only visible on small screens when sidebar is open */}
+      {isSidebarOpen && (
+        <div 
+          className="absolute inset-0 z-40 bg-slate-900/60 backdrop-blur-sm md:hidden transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* SIDEBAR: Absolute floating drawer on mobile, relative structural column on desktop */}
       <aside
-        className={`bg-white text-slate-800 flex flex-col border-r border-slate-200 shadow-sm shrink-0 transition-[width] duration-300 ease-in-out motion-reduce:transition-none ${
-          isSidebarOpen ? 'w-56' : 'w-16'
+        className={`flex shrink-0 flex-col h-full border-r border-slate-800 bg-[#0b1120] text-slate-100 shadow-2xl md:shadow-sm transition-all duration-300 ease-in-out motion-reduce:transition-none z-50 ${
+          isSidebarOpen 
+            ? 'absolute md:relative w-[260px] lg:w-[280px]' 
+            : 'relative w-16'
         }`}
       >
         {/* HEADER AREA */}
-        <div className={`p-3.5 border-b border-slate-200 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
+        <div className={`p-3.5 border-b border-slate-800 flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
           <div
             className={`flex flex-col items-start gap-2 overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
-              isSidebarOpen ? 'opacity-100 max-w-[180px]' : 'opacity-0 max-w-0'
+              isSidebarOpen ? 'opacity-100 max-w-[200px]' : 'opacity-0 max-w-0'
             }`}
           >
             <img
@@ -68,7 +80,7 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
               alt="ILOPRISAA Document Management System Logo"
               className="h-6 w-auto object-contain object-left flex-none"
             />
-            <p className="ml-1 text-[10px] text-slate-500 font-bold uppercase tracking-widest whitespace-nowrap">
+            <p className="ml-1 text-[10px] text-slate-400 font-bold uppercase tracking-widest whitespace-nowrap">
               {role ? ROLE_LABELS[role as UserRole] || portalTitle : portalTitle}
             </p>
           </div>
@@ -76,21 +88,21 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
           <button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 active:scale-95 rounded-lg transition-[color,background-color,transform] duration-150"
+            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 active:scale-95 rounded-lg transition-[color,background-color,transform] duration-150"
             title="Toggle Menu"
           >
             <PanelLeft className="w-5 h-5" />
           </button>
         </div>
 
- {/* NAVIGATION LINKS */}
-       <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto overflow-x-hidden">
+        {/* NAVIGATION LINKS */}
+        <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto overflow-x-hidden">
           {navGroups.map((group, groupIndex) => (
             <div key={group.label ?? `ungrouped-${groupIndex}`}>
               {group.label && (
                 <p
-                  className={`px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
-                    isSidebarOpen ? 'opacity-100 max-w-[200px] mb-1.5' : 'opacity-0 max-w-0 mb-0'
+                  className={`px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+                    isSidebarOpen ? 'opacity-100 max-w-[220px] mb-1.5' : 'opacity-0 max-w-0 mb-0'
                   }`}
                 >
                   {group.label}
@@ -101,20 +113,24 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
                   <button
                     key={item.id}
                     type="button"
-                    onClick={item.onClick}
+                    onClick={() => {
+                      item.onClick();
+                      // Auto-close sidebar on mobile after clicking a link
+                      if (window.innerWidth < 768) setIsSidebarOpen(false);
+                    }}
                     title={!isSidebarOpen ? item.label : undefined}
                     className={`w-full flex items-center rounded-lg text-sm font-medium transition-[color,background-color,border-color,transform] duration-150 active:scale-[0.98] ${
                       isSidebarOpen ? 'px-3 py-2.5 gap-3 justify-start' : 'p-2.5 justify-center'
                     } ${
                       item.active
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100 border border-transparent'
                     }`}
                   >
                     <div className="shrink-0">{item.icon}</div>
                     <span
                       className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
-                        isSidebarOpen ? 'opacity-100 max-w-[160px]' : 'opacity-0 max-w-0'
+                        isSidebarOpen ? 'opacity-100 max-w-[200px]' : 'opacity-0 max-w-0'
                       }`}
                     >
                       {item.label}
@@ -127,26 +143,26 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
         </nav>
 
         {/* BOTTOM PROFILE/LOGOUT */}
-        <div className="p-3.5 border-t border-slate-200 flex flex-col items-center">
+        <div className="p-3.5 border-t border-slate-800 flex flex-col items-center">
           <div
             className={`w-full overflow-hidden transition-[opacity,max-height,margin] duration-150 ${
               isSidebarOpen ? 'opacity-100 max-h-16 mb-4' : 'opacity-0 max-h-0 mb-0'
             }`}
           >
-            <p className="text-sm font-bold text-slate-800 px-2 truncate">{user?.full_name ?? 'User'}</p>
-            <p className="text-xs text-slate-500 px-2 truncate">{user?.email}</p>
+            <p className="text-sm font-bold text-slate-200 px-2 truncate">{user?.full_name ?? 'User'}</p>
+            <p className="text-xs text-slate-400 px-2 truncate">{user?.email}</p>
           </div>
 
           <button
             type="button"
             onClick={() => setIsLogoutModalOpen(true)}
-            className="w-full flex items-center justify-start gap-3 p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 active:scale-[0.98] rounded-lg transition-[color,background-color,transform] duration-150 overflow-hidden"
+            className="w-full flex items-center justify-start gap-3 p-2.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 active:scale-[0.98] rounded-lg transition-[color,background-color,transform] duration-150 overflow-hidden"
             title="Sign Out"
           >
             <LogOut className="w-5 h-5 shrink-0" />
             <span
               className={`text-sm font-medium overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
-                isSidebarOpen ? 'opacity-100 max-w-[100px]' : 'opacity-0 max-w-0'
+                isSidebarOpen ? 'opacity-100 max-w-[140px]' : 'opacity-0 max-w-0'
               }`}
             >
               Sign Out
@@ -155,7 +171,8 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
         </div>
       </aside>
 
-      <main className="flex-1 h-full overflow-y-auto relative">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 h-full overflow-y-auto relative w-full">
         {children}
       </main>
 

@@ -5,11 +5,16 @@ export interface CoachProfile {
   full_name: string;
   email: string;
   phone?: string;
-  dob?: string | null; // Allow null to fix the date crash
+  dob?: string | null; 
   gender?: string;
   sport?: string;
   team_motto?: string | null;
-  institution_id?: string; // <--- Add this new field
+  institution_id?: string; 
+  avatar_seed?: string;
+  secondary_disciplines?: string[];
+  notify_sms_missing_document?: boolean;
+  notify_committee_status?: boolean;
+  notify_roster_freeze?: boolean;
 }
 export async function getProfile(userId: string): Promise<CoachProfile | null> {
   const { data, error } = await supabase

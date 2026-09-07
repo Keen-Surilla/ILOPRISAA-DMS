@@ -1,3 +1,4 @@
+// src/1-presentation-tier/pages/super-admin/PremiumDateTimePicker.tsx
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, Clock, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react';
 
@@ -8,15 +9,14 @@ const MONTH_NAMES = [
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 export interface PremiumDateTimePickerProps {
-  /** Small pill label shown above the trigger, e.g. "Date & Time" */
   label?: string;
-  /** Local datetime string, e.g. "2026-05-01T18:00:00". Pass null/'' for empty. */
   value: string | null;
   onChange: (isoLocal: string) => void;
   placeholder?: string;
   minYear?: number;
   maxYear?: number;
   disabled?: boolean;
+  showTime?: boolean;
 }
 
 function pad(n: number): string {
@@ -64,19 +64,15 @@ function buildGrid(year: number, month: number): DayCell[] {
   return cells;
 }
 
-function formatDisplay(y: number, m: number, d: number, h24: number, min: number): string {
-  const { hour12, ampm } = to12Hour(h24);
-  return `${MONTH_NAMES[m].slice(0, 3)} ${pad(d)}, ${y}  |  ${pad(hour12)}:${pad(min)} ${ampm}`;
-}
-
 export function PremiumDateTimePicker({
-  label = 'Date & Time',
+  label = 'Filter Date',
   value,
   onChange,
-  placeholder = 'Select date & time',
+  placeholder = 'Select date...',
   minYear = 2000,
   maxYear = 2100,
   disabled,
+  showTime = true,
 }: PremiumDateTimePickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -176,55 +172,54 @@ export function PremiumDateTimePicker({
 
   const handleDone = useCallback(() => {
     const day = selDay ?? 1;
-    const h24 = to24Hour(hour12, ampm);
-    onChange(toLocalISO(selYear, selMonth, day, h24, minute));
+    const h24 = showTime ? to24Hour(hour12, ampm) : 0;
+    const min = showTime ? minute : 0;
+    onChange(toLocalISO(selYear, selMonth, day, h24, min));
     setIsOpen(false);
-  }, [selYear, selMonth, selDay, hour12, ampm, minute, onChange]);
+  }, [selYear, selMonth, selDay, hour12, ampm, minute, showTime, onChange]);
 
-  const displayText = parsed
-    ? formatDisplay(selYear, selMonth, selDay ?? parsed.d, to24Hour(hour12, ampm), minute)
+  const displayText = parsed && selDay !== null
+    ? showTime
+      ? `${MONTH_NAMES[selMonth].slice(0, 3)} ${pad(selDay)}, ${selYear} | ${pad(hour12)}:${pad(minute)} ${ampm}`
+      : `${MONTH_NAMES[selMonth].slice(0, 3)} ${pad(selDay)}, ${selYear}`
     : null;
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-sm">
+    <div ref={containerRef} className="relative w-full sm:w-auto">
+      {/* Trigger Button (Consistent Blue with White Text) */}
       <button
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((o) => !o)}
-        className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-          isOpen ? 'border-indigo-500 ring-2 ring-indigo-100' : 'border-slate-200 hover:border-slate-300'
-        } ${disabled ? 'bg-slate-50 cursor-not-allowed opacity-60' : 'bg-white'}`}
+        className={`flex items-center gap-2.5 rounded-xl border px-3.5 py-2 text-left transition-all shadow-sm bg-white border-slate-200 text-slate-800 dark:bg-[#0b1120] dark:border-slate-700 dark:text-slate-100 ${
+          isOpen ? 'border-blue-400 ring-2 ring-blue-500/20 dark:border-blue-500/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+        } ${disabled ? 'bg-slate-100 dark:bg-slate-800 cursor-not-allowed opacity-60' : ''}`}
       >
-        <span className="shrink-0 flex items-center gap-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-semibold px-2.5 py-1">
+        <span className="shrink-0 flex items-center gap-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 text-[10px] font-bold px-2.5 py-0.5">
           <Calendar className="w-3 h-3" />
           {label}
         </span>
-        <span className="flex-1 flex items-center gap-2 text-sm font-medium text-slate-700 truncate">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">
           {displayText ? (
-            <>
-              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
-              <span className="truncate">{MONTH_NAMES[selMonth].slice(0, 3)} {pad(selDay ?? 1)}, {selYear}</span>
-              <span className="text-slate-300">|</span>
-              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>{pad(hour12)}:{pad(minute)} {ampm}</span>
-            </>
+            <span className="truncate">{displayText}</span>
           ) : (
-            <span className="text-slate-400">{placeholder}</span>
+            <span className="text-slate-400 dark:text-slate-500">{placeholder}</span>
           )}
         </span>
-        <Calendar className="w-5 h-5 text-slate-400 shrink-0" />
+        <Calendar className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0 ml-1" />
       </button>
 
-      {isOpen && (
-        <div className="absolute z-20 mt-2 w-[420px] max-w-[92vw] rounded-2xl border border-slate-200 bg-white shadow-xl p-4">
-          <div className="flex gap-4">
-            {/* Calendar column */}
+
+{/* Dropdown Popup Card (Solid white in light mode, dark slate in dark mode) */}
+{isOpen && (
+  <div className={`absolute right-0 z-[80] mt-2 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#0b1120] shadow-2xl p-4 text-slate-900 dark:text-slate-100 ${showTime ? 'w-[380px]' : 'w-[320px]'} max-w-[92vw]`}>
+          <div className={`flex ${showTime ? 'gap-4' : 'flex-col gap-3'}`}>
             <div className="flex-1">
               <div className="flex items-center justify-between gap-1 mb-3">
                 <button
                   type="button"
                   onClick={() => shiftMonth(-1)}
-                  className="p-1.5 rounded-full bg-indigo-600 text-white hover:bg-indigo-700"
+                  className="p-1.5 rounded-full bg-blue-600 text-white hover:bg-blue-500 transition-colors"
                   aria-label="Previous month"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -233,7 +228,7 @@ export function PremiumDateTimePicker({
                 <select
                   value={viewMonth}
                   onChange={(e) => setViewMonth(Number(e.target.value))}
-                  className="text-sm font-medium text-slate-700 border border-slate-200 rounded-lg px-2 py-1 bg-white"
+                  className="text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 bg-slate-50 dark:bg-slate-800 focus:outline-none"
                 >
                   {MONTH_NAMES.map((mn, i) => (
                     <option key={mn} value={i}>{mn}</option>
@@ -243,7 +238,7 @@ export function PremiumDateTimePicker({
                 <select
                   value={viewYear}
                   onChange={(e) => setViewYear(Number(e.target.value))}
-                  className="text-sm font-medium text-slate-700 border border-slate-200 rounded-lg px-2 py-1 bg-white"
+                  className="text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 bg-slate-50 dark:bg-slate-800 focus:outline-none"
                 >
                   {years.map((y) => (
                     <option key={y} value={y}>{y}</option>
@@ -253,7 +248,7 @@ export function PremiumDateTimePicker({
                 <button
                   type="button"
                   onClick={() => shiftMonth(1)}
-                  className="p-1.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   aria-label="Next month"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -262,7 +257,7 @@ export function PremiumDateTimePicker({
 
               <div className="grid grid-cols-7 gap-y-1 text-center">
                 {WEEKDAYS.map((w) => (
-                  <div key={w} className="text-[10px] font-semibold text-slate-400 uppercase pb-1">{w}</div>
+                  <div key={w} className="text-[10px] font-bold text-slate-400 uppercase pb-1">{w}</div>
                 ))}
                 {grid.map((cell, i) => {
                   const isSelected = cell.current && selDay === cell.day && selMonth === viewMonth && selYear === viewYear;
@@ -273,14 +268,14 @@ export function PremiumDateTimePicker({
                       key={i}
                       disabled={!cell.current}
                       onClick={() => cell.current && pickDay(cell.day)}
-                      className={`text-xs h-7 w-7 mx-auto rounded-lg flex items-center justify-center transition-colors ${
+                      className={`text-xs h-8 w-8 mx-auto rounded-xl flex items-center justify-center transition-colors font-medium ${
                         !cell.current
-                          ? 'text-slate-300 cursor-default'
+                          ? 'text-slate-300 dark:text-slate-600 cursor-default'
                           : isSelected
-                          ? 'bg-indigo-600 text-white font-semibold'
+                          ? 'bg-blue-600 text-white font-bold shadow-md shadow-blue-500/30'
                           : isToday
-                          ? 'bg-indigo-50 text-indigo-700 font-semibold'
-                          : 'text-slate-600 hover:bg-slate-100'
+                          ? 'bg-blue-50 dark:bg-blue-500/25 text-blue-600 dark:text-blue-400 font-bold border border-blue-300 dark:border-blue-500/40'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       {cell.day}
@@ -290,46 +285,34 @@ export function PremiumDateTimePicker({
               </div>
             </div>
 
-            {/* Time column */}
-            <div className="w-32 shrink-0 border-l border-slate-100 pl-4 flex flex-col">
-              <p className="text-xs font-semibold text-slate-500 mb-2">Time</p>
-              <div className="grid grid-cols-3 gap-1 text-center mb-1">
-                <span className="text-[10px] text-slate-400">Hour</span>
-                <span className="text-[10px] text-slate-400">Min</span>
-                <span className="text-[10px] text-slate-400">AM/PM</span>
+            {/* Optional Time Column */}
+            {showTime && (
+              <div className="w-28 shrink-0 border-l border-slate-200 dark:border-slate-800 pl-3 flex flex-col">
+                <p className="text-[10px] font-semibold text-slate-400 mb-2">TIME</p>
+                <div className="grid grid-cols-3 gap-1 text-center mb-1">
+                  <span className="text-[9px] text-slate-400">Hr</span>
+                  <span className="text-[9px] text-slate-400">Min</span>
+                  <span className="text-[9px] text-slate-400">A/P</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 items-center">
+                  <SpinButton value={pad(hour12)} onUp={() => bumpHour(1)} onDown={() => bumpHour(-1)} />
+                  <SpinButton value={pad(minute)} onUp={() => bumpMinute(1)} onDown={() => bumpMinute(-1)} />
+                  <SpinButton value={ampm} onUp={toggleAmpm} onDown={toggleAmpm} />
+                </div>
+                <div className="mt-4 flex flex-col gap-1.5">
+                  <button type="button" onClick={goToday} className="text-[11px] font-medium border border-slate-200 dark:border-slate-700 rounded-lg py-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors">Today</button>
+                  <button type="button" onClick={goNow} className="text-[11px] font-medium border border-slate-200 dark:border-slate-700 rounded-lg py-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors">Now</button>
+                </div>
               </div>
-
-              <div className="grid grid-cols-3 gap-1 items-center">
-                <SpinButton value={pad(hour12)} onUp={() => bumpHour(1)} onDown={() => bumpHour(-1)} />
-                <SpinButton value={pad(minute)} onUp={() => bumpMinute(1)} onDown={() => bumpMinute(-1)} />
-                <SpinButton value={ampm} onUp={toggleAmpm} onDown={toggleAmpm} />
-              </div>
-
-              <div className="mt-4 flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={goToday}
-                  className="text-xs font-medium border border-slate-200 rounded-lg py-1.5 hover:bg-slate-50"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={goNow}
-                  className="text-xs font-medium border border-slate-200 rounded-lg py-1.5 hover:bg-slate-50"
-                >
-                  Now
-                </button>
-              </div>
-            </div>
+            )}
           </div>
 
           <button
             type="button"
             onClick={handleDone}
-            className="mt-4 w-full rounded-xl bg-indigo-600 text-white text-sm font-semibold py-2.5 hover:bg-indigo-700 transition-colors"
+            className="mt-4 w-full rounded-xl bg-blue-600 text-white text-xs font-bold py-2.5 hover:bg-blue-500 transition-colors shadow-sm"
           >
-            Done
+            Apply Filter
           </button>
         </div>
       )}
@@ -340,14 +323,14 @@ export function PremiumDateTimePicker({
 function SpinButton({ value, onUp, onDown }: { value: string; onUp: () => void; onDown: () => void }) {
   return (
     <div className="flex flex-col items-center">
-      <button type="button" onClick={onUp} className="text-slate-400 hover:text-indigo-600" aria-label="Increase">
-        <ChevronUp className="w-3.5 h-3.5" />
+      <button type="button" onClick={onUp} className="text-slate-400 hover:text-blue-600" aria-label="Increase">
+        <ChevronUp className="w-3 h-3" />
       </button>
-      <div className="text-sm font-semibold text-slate-700 border border-slate-200 rounded-md w-full text-center py-1">
+      <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-md w-full text-center py-0.5 bg-slate-50 dark:bg-slate-800">
         {value}
       </div>
-      <button type="button" onClick={onDown} className="text-slate-400 hover:text-indigo-600" aria-label="Decrease">
-        <ChevronDown className="w-3.5 h-3.5" />
+      <button type="button" onClick={onDown} className="text-slate-400 hover:text-blue-600" aria-label="Decrease">
+        <ChevronDown className="w-3 h-3" />
       </button>
     </div>
   );
