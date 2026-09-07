@@ -1022,6 +1022,7 @@ export default function CoachDashboard() {
     <>
       <PortalShell
         portalTitle="Coach Portal"
+        onSettingsClick={() => setIsSettingsOpen(true)}
         navGroups={[
           {
             label: null,
@@ -1043,13 +1044,6 @@ export default function CoachDashboard() {
               { id: 'screening', label: 'Screening', icon: <ClipboardCheck className="w-5 h-5" />, active: activeTab === 'screening', onClick: () => setActiveTab('screening') },
               { id: 'reports', label: 'Reports', icon: <FileText className="w-5 h-5" />, active: activeTab === 'reports', onClick: () => setActiveTab('reports') },
               { id: 'archives', label: 'Archives', icon: <Archive className="w-5 h-5" />, active: activeTab === 'archives', onClick: () => setActiveTab('archives') },
-            ],
-          },
-          {
-            label: 'Account',
-            items: [
-              { id: 'coach-profile', label: 'My Profile', icon: <UserCircle className="w-5 h-5" />, active: activeTab === 'coach-profile', onClick: () => setActiveTab('coach-profile') },
-              { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, active: false, onClick: () => setIsSettingsOpen(true) },
             ],
           },
         ]}
