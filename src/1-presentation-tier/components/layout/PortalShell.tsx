@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, lazy } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import type { UserRole } from '../../../3-data-tier/types/database.types.extras';
 import Logo2 from "../../../assets/Frame 100.svg";
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { PanelLeft, LogOut } from 'lucide-react';
+import { PanelLeft, LogOut, Settings, Info, ChevronRight } from 'lucide-react';
+
+
 
 export interface NavItem {
   id: string;
@@ -35,12 +37,22 @@ const ROLE_LABELS: Record<UserRole, string> = {
   athlete: 'Athlete Portal',
 };
 
-export function PortalShell({ portalTitle, navGroups = [], children }: PortalShellProps) {
+// Add onSettingsClick to the interface
+interface PortalShellProps {
+  portalTitle: string;
+  user?: any;
+  navGroups: NavGroup[]; 
+  children: ReactNode;
+  onSettingsClick?: () => void; 
+}
+
+export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, children }: PortalShellProps) {
   const navigate = useNavigate();
   const { user, role, signOut } = useAuthStore();
 
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     setIsLogoutModalOpen(false);
@@ -142,31 +154,84 @@ export function PortalShell({ portalTitle, navGroups = [], children }: PortalShe
           ))}
         </nav>
 
-        {/* BOTTOM PROFILE/LOGOUT */}
-        <div className="p-3.5 border-t border-slate-800 flex flex-col items-center">
-          <div
-            className={`w-full overflow-hidden transition-[opacity,max-height,margin] duration-150 ${
-              isSidebarOpen ? 'opacity-100 max-h-16 mb-4' : 'opacity-0 max-h-0 mb-0'
-            }`}
-          >
-            <p className="text-sm font-bold text-slate-200 px-2 truncate">{user?.full_name ?? 'User'}</p>
-            <p className="text-xs text-slate-400 px-2 truncate">{user?.email}</p>
-          </div>
+        {/* BOTTOM PROFILE / ACCOUNT MENU */}
+        <div className="relative p-3.5 border-t border-slate-800">
+          {/* Popup account menu: only appears after clicking the profile row */}
+          {isAccountMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsAccountMenuOpen(false)} aria-hidden="true" />
+              <div className="absolute bottom-full left-3.5 right-3.5 mb-2 z-50 rounded-xl border border-slate-800 bg-[#0f172a] shadow-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-800">
+                  <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                </div>
 
+                <div className="py-1">
+                  {/* Conditionally render the Settings button ONLY if the dashboard provided a settings modal */}
+                  {onSettingsClick && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAccountMenuOpen(false);
+                        onSettingsClick(); // <-- CALL THE PROP INSTEAD OF NAVIGATING
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-slate-100 transition-colors duration-150"
+                    >
+                      <Settings className="w-4 h-4 shrink-0" />
+                      Settings
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAccountMenuOpen(false);
+                      navigate('/learn-more');
+                    }}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-slate-100 transition-colors duration-150"
+                  >
+                    <span className="flex items-center gap-3">
+                      <Info className="w-4 h-4 shrink-0" />
+                      Learn more
+                    </span>
+                    <ChevronRight className="w-4 h-4 shrink-0 text-slate-500" />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAccountMenuOpen(false);
+                    setIsLogoutModalOpen(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-300 hover:bg-rose-500/10 hover:text-rose-400 transition-colors duration-150 border-t border-slate-800"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  Log out
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Profile row: click to reveal the account menu above */}
           <button
             type="button"
-            onClick={() => setIsLogoutModalOpen(true)}
-            className="w-full flex items-center justify-start gap-3 p-2.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 active:scale-[0.98] rounded-lg transition-[color,background-color,transform] duration-150 overflow-hidden"
-            title="Sign Out"
+            onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+            title={!isSidebarOpen ? (user?.full_name ?? 'Account') : undefined}
+            className={`w-full flex items-center rounded-lg transition-[background-color,transform] duration-150 active:scale-[0.98] hover:bg-slate-800/80 ${
+              isSidebarOpen ? 'gap-3 px-2 py-2 justify-start' : 'justify-center p-2'
+            }`}
           >
-            <LogOut className="w-5 h-5 shrink-0" />
-            <span
-              className={`text-sm font-medium overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
-                isSidebarOpen ? 'opacity-100 max-w-[140px]' : 'opacity-0 max-w-0'
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-700 text-slate-200 text-xs font-bold shrink-0 uppercase">
+              {user?.full_name?.[0] ?? user?.email?.[0] ?? 'U'}
+            </div>
+            <div
+              className={`flex-1 min-w-0 text-left overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+                isSidebarOpen ? 'opacity-100 max-w-[160px]' : 'opacity-0 max-w-0'
               }`}
             >
-              Sign Out
-            </span>
+              <p className="text-sm font-bold text-slate-200 truncate">{user?.full_name ?? 'User'}</p>
+              <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+            </div>
           </button>
         </div>
       </aside>

@@ -14,8 +14,12 @@ import {
   Bell,
   Plus,
   AlertCircle,
+  Monitor,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
+import { useThemeStore } from '../../../2-application-tier/stores/themeStore';
 import { useTeamRoster } from '../../../2-application-tier/hooks/useTeamRoster';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile } from '../../../3-data-tier/services/profileService';
@@ -25,16 +29,48 @@ import { SexOption } from '../../components/ui/SexOption';
 import { ILOPRISAA_SCHOOLS } from '../../../3-data-tier/constant/schools';
 import { ILOPRISAA_SPORTS } from '../../../3-data-tier/constant/sports';
 import { SchoolList } from '../../components/ui/SchoolList';
+import { PremiumDateTimePicker } from '../../components/ui/PremiumDateTimePicker';
 
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(' ');
 
-// DiceBear — free, MIT-licensed, no API key. Seed drives the glyph; shuffling
-// just swaps to a new random seed. Swap the style segment for a different look:
-// https://www.dicebear.com/styles
+// DiceBear — free, MIT-licensed, no API key.
 const buildAvatarUrl = (seed: string) =>
   `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&backgroundColor=0f766e,0891b2,0e7490`;
 
 const generateRandomSeed = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+// Neutral grey scrollbar (matches the rest of the site) instead of the browser's default dark thumb
+const scrollbarStyles = `
+  .settings-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .settings-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .settings-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .settings-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .settings-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+  }
+  .dark .settings-scrollbar {
+    scrollbar-color: #475569 transparent;
+  }
+  .dark .settings-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #475569;
+  }
+  .dark .settings-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #64748b;
+  }
+`;
 
 export function useRealtimeSync() {
   const queryClient = useQueryClient();
@@ -57,7 +93,10 @@ export function useRealtimeSync() {
   }, [queryClient]);
 }
 
-// Small inline toggle switch — teal/emerald "on" state.
+// Consistent Input Focus/Hover Styles across all fields
+const sharedInputBase = "w-full pr-3 py-2.5 bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.1] rounded-xl text-sm text-slate-900 dark:text-[#f8fafc] shadow-sm outline-none transition-all hover:border-blue-600 dark:hover:border-[#7dd3fc]/60 focus:border-blue-600 dark:focus:border-[#7dd3fc]/60 focus:ring-2 focus:ring-blue-600/15 dark:focus:ring-[#7dd3fc]/15";
+
+// Small inline toggle switch
 function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button
@@ -81,9 +120,7 @@ function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange
   );
 }
 
-// Bottom-right toast, portaled to document.body so it always sits above
-// everything at the viewport level instead of being clipped/positioned
-// relative to the modal.
+// Bottom-right toast
 function Toast({ toast }: { toast: { type: 'success' | 'error'; message: string } | null }) {
   if (typeof document === 'undefined') return null;
   const isError = toast?.type === 'error';
@@ -116,9 +153,7 @@ interface SportOption {
   name: string;
 }
 
-// Custom dropdown for sport selection — native <select> popups render with
-// the OS's own white chrome and can't be dark-mode styled, which is why the
-// sport picker looked broken. This one is fully ours to theme.
+// Custom dropdown for sport selection
 function SportDropdown({
   value,
   onChange,
@@ -144,11 +179,16 @@ function SportDropdown({
   const selected = groups.flatMap(g => g.items).find(s => s.id === value);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative w-full">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-2 pl-4 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.1] bg-gradient-to-b from-white to-slate-50 dark:from-white/[0.07] dark:to-white/[0.02] text-sm text-slate-800 dark:text-[#f8fafc] shadow-sm hover:border-sky-300 dark:hover:border-[#7dd3fc]/40 focus:outline-none focus:ring-2 focus:ring-sky-500/20 dark:focus:ring-[#7dd3fc]/20 transition-all"
+        className={cn(
+          "w-full flex items-center justify-between gap-2 pl-3 pr-3 py-2.5 bg-white dark:bg-white/[0.05] border rounded-xl text-sm text-slate-900 dark:text-[#f8fafc] shadow-sm outline-none transition-all",
+          open
+            ? "border-blue-600 ring-2 ring-blue-600/15 dark:border-[#7dd3fc]/60 dark:ring-[#7dd3fc]/15"
+            : "border-slate-200 dark:border-white/[0.1] hover:border-blue-600 dark:hover:border-[#7dd3fc]/60 focus:border-blue-600 dark:focus:border-[#7dd3fc]/60 focus:ring-2 focus:ring-blue-600/15 dark:focus:ring-[#7dd3fc]/15"
+        )}
       >
         <span className={selected ? 'font-medium' : 'text-slate-400 dark:text-[#64748b]'}>
           {selected ? selected.name : placeholder || 'Select…'}
@@ -157,7 +197,7 @@ function SportDropdown({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-2 w-full max-h-64 overflow-auto rounded-xl border border-slate-200 dark:border-white/[0.1] bg-white dark:bg-[#0f172a] shadow-xl shadow-black/10 dark:shadow-black/50 p-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="settings-scrollbar absolute z-30 mt-2 w-full max-h-64 overflow-auto rounded-xl border border-slate-200 dark:border-white/[0.1] bg-white dark:bg-[#0f172a] shadow-xl shadow-black/10 dark:shadow-black/50 p-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
           {groups.map((group, gi) => (
             <div key={gi}>
               {group.label && (
@@ -195,7 +235,7 @@ function SportDropdown({
   );
 }
 
-// Row layout used throughout: label on the left, control on the right.
+// Row layout used throughout
 function FieldRow({
   label,
   hint,
@@ -223,9 +263,11 @@ function FieldRow({
         <label className="text-sm font-medium text-slate-700 dark:text-[#cbd5e1]">{label}</label>
         {hint && <p className="text-[11px] text-slate-500 dark:text-[#94a3b8] mt-1">{hint}</p>}
       </div>
-      <div className="w-full md:w-2/3">
-        {tag && <div className="flex justify-end mb-1.5">{tag}</div>}
-        {children}
+      <div className="w-full md:w-2/3 flex justify-end">
+        <div className="w-full">
+           {tag && <div className="flex justify-end mb-1.5">{tag}</div>}
+           {children}
+        </div>
       </div>
     </div>
   );
@@ -235,8 +277,32 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
+  const { isDark, toggleTheme } = useThemeStore();
+  const [appTheme, setAppTheme] = useState<'system' | 'light' | 'dark'>(() => {
+    return (localStorage.getItem('theme') as 'system' | 'light' | 'dark') || 'system';
+  });
+
+  const handleThemeChange = (mode: 'system' | 'light' | 'dark') => {
+    setAppTheme(mode);
+    localStorage.setItem('theme', mode);
+    
+    const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const targetDark = mode === 'dark' || (mode === 'system' && isSystemDark);
+    
+    if (targetDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    if (targetDark !== isDark && typeof toggleTheme === 'function') {
+      toggleTheme();
+    }
+  };
+
   const [activeTab, setActiveTab] = useState('account');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [saveCount, setSaveCount] = useState(0); // Tracks successful autosaves
   const [institution, setInstitution] = useState('');
   const [addingDiscipline, setAddingDiscipline] = useState(false);
 
@@ -246,7 +312,6 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     enabled: !!user?.id
   });
 
-  // Reused for the "Institutional Delegation Scope" footer count.
   const roster = useTeamRoster(user?.id);
   const athleteCount = (roster as any)?.athletes?.length ?? 0;
 
@@ -258,16 +323,25 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     sport: '',
     institution_id: '',
     team_motto: '',
-    avatar_seed: '', 
+    avatar_seed: '',
     secondary_disciplines: [] as string[],
     notify_sms_missing_document: true,
     notify_committee_status: true,
     notify_roster_freeze: true,
   });
 
+  const initialLoadDone = useRef(false);
+  const lastSavedData = useRef<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True while the coach's cursor is inside a free-typing field (full name,
+  // team motto). While true, the debounce effect below won't schedule any
+  // save — the onBlur handlers on those fields save directly once the coach
+  // leaves the field instead.
+  const isTypingRef = useRef(false);
+
   useEffect(() => {
     if (profile) {
-      setFormData({
+      const initialData = {
         full_name: profile.full_name || '',
         phone: profile.phone || '',
         dob: profile.dob || '',
@@ -275,12 +349,16 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
         sport: profile.sport || '',
         institution_id: profile.institution_id || '',
         team_motto: profile.team_motto || '',
-        avatar_seed: profile.avatar_seed || user?.id || 'coach',
-        secondary_disciplines: profile.secondary_disciplines || [],
-        notify_sms_missing_document: profile.notify_sms_missing_document ?? true,
-        notify_committee_status: profile.notify_committee_status ?? true,
-        notify_roster_freeze: profile.notify_roster_freeze ?? true,
-      });
+        avatar_seed: (profile as any).avatar_seed || user?.id || 'coach',
+        secondary_disciplines: (profile as any).secondary_disciplines || [],
+        notify_sms_missing_document: (profile as any).notify_sms_missing_document ?? true,
+        notify_committee_status: (profile as any).notify_committee_status ?? true,
+        notify_roster_freeze: (profile as any).notify_roster_freeze ?? true,
+      };
+
+      setFormData(initialData);
+      lastSavedData.current = JSON.stringify(initialData);
+      initialLoadDone.current = true;
 
       if (profile.institution_id) {
         const matchedSchool = ILOPRISAA_SCHOOLS.find(s => s.id === profile.institution_id);
@@ -298,8 +376,12 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     mutationFn: (updatedData: any) => updateProfile(user?.id || '', updatedData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['coachProfile', user?.id] });
-      setToast({ type: 'success', message: 'All changes saved automatically' });
-      setTimeout(() => setToast(null), 3000);
+      setSaveCount((prev) => {
+        const nextCount = prev + 1;
+        setToast({ type: 'success', message: `Saved (x${nextCount})` });
+        return nextCount;
+      });
+      setTimeout(() => setToast(null), 8000);
     },
     onError: (error: any) => {
       console.error('Profile update failed:', error);
@@ -308,27 +390,65 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     }
   });
 
-  // --- Autosave, debounced. Team fields now live on this same page, so
-  // everything autosaves together — there's no more separate Save button. ---
-  const isFirstRun = useRef(true);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The one place formData actually gets saved. Shared by both the
+  // change-triggered debounce (for toggles/dropdowns/pickers, where there's
+  // no "typing" state to wait out) and the onBlur handlers on free-typing
+  // fields (full name, team motto).
+  const saveNow = () => {
+    const currentDataString = JSON.stringify(formData);
+    if (currentDataString === lastSavedData.current) return;
+
+    const {
+      avatar_seed,
+      secondary_disciplines,
+      notify_sms_missing_document,
+      notify_committee_status,
+      notify_roster_freeze,
+      ...safeDatabaseFields
+    } = formData;
+
+    const payloadToSave = {
+      ...safeDatabaseFields,
+      dob: safeDatabaseFields.dob === '' ? null : safeDatabaseFields.dob
+    };
+
+    updateMutation.mutate(payloadToSave);
+    lastSavedData.current = currentDataString;
+  };
+
+  // Called onFocus of a free-typing field: marks typing as in-progress and
+  // cancels any save that was already scheduled from a prior field change,
+  // so it can't fire mid-typing.
+  const handleTypingFocus = () => {
+    isTypingRef.current = true;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  };
+
+  // Called onBlur of a free-typing field: typing is done, save immediately.
+  const handleTypingBlur = () => {
+    isTypingRef.current = false;
+    saveNow();
+  };
 
   useEffect(() => {
-    if (isLoading) return;
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
-      return;
-    }
+    if (!initialLoadDone.current) return;
+    // A text field is currently focused — wait for its onBlur to save
+    // instead of debouncing here, so nothing saves mid-keystroke.
+    if (isTypingRef.current) return;
+
+    const currentDataString = JSON.stringify(formData);
+    if (currentDataString === lastSavedData.current) return;
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    
     debounceRef.current = setTimeout(() => {
-      const payloadToSave = { ...formData, dob: formData.dob === '' ? null : formData.dob };
-      updateMutation.mutate(payloadToSave);
+      saveNow();
     }, 900);
+
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData, isLoading]);
+  }, [formData]);
 
   const handleShuffleAvatar = () => {
     setFormData(prev => ({ ...prev, avatar_seed: generateRandomSeed() }));
@@ -376,37 +496,31 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm p-4 md:p-8 animate-in fade-in duration-200">
+      <style>{scrollbarStyles}</style>
 
-      <div className="bg-white dark:bg-[#0b1220] rounded-2xl shadow-2xl dark:shadow-black/50 border border-slate-200 dark:border-white/[0.06] flex overflow-hidden h-full max-h-[750px] w-full max-w-5xl relative animate-in zoom-in-95 duration-200">
-
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-50 p-2 bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-[#94a3b8] hover:bg-slate-200 dark:hover:bg-white/[0.1] hover:text-slate-700 dark:hover:text-[#f8fafc] rounded-full transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div className="bg-white dark:bg-[#0b1220] rounded-2xl shadow-2xl dark:shadow-black/50 border-slate-200 dark:border-white/[0.06] flex overflow-hidden h-full max-h-[750px] w-full max-w-5xl relative animate-in zoom-in-95 duration-200">
 
         {/* LEFT SIDEBAR */}
-        <div className="w-64 bg-[#f8f9fa] dark:bg-[#0c1324] border-r border-slate-200 dark:border-white/[0.06] p-4 flex flex-col shrink-0">
-          <div className="relative mb-6 mt-2">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 dark:text-[#64748b]" />
+          <div className="w-55 bg-[#0b1120] dark:bg-[#0f172a] p-4 flex flex-col shrink-0">
+            <div className="relative mb-6 mt-2">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400 text-[#0b1120]" />
             <input
               type="text"
               placeholder="Search"
-              className="w-full pl-9 pr-4 py-2 bg-slate-200/60 dark:bg-white/[0.05] border-transparent rounded-lg text-sm text-slate-700 dark:text-[#f8fafc] placeholder-slate-500 dark:placeholder-[#64748b] focus:bg-white dark:focus:bg-white/[0.08] focus:border-slate-300 dark:focus:border-white/[0.15] focus:ring-2 focus:ring-slate-100 dark:focus:ring-white/[0.06] outline-none transition-all"
+              className="w-full pl-9 pr-4 py-2 bg-white/[0.05] border-transparent rounded-lg text-sm text-[#f8fafc] placeholder-[#64748b] focus:bg-white/[0.08] focus:border-white/[0.15] focus:ring-2 focus:ring-white/[0.06] outline-none transition-all"
             />
           </div>
 
           <div className="text-xs font-semibold text-slate-500 dark:text-[#64748b] mb-3 px-2">Settings</div>
 
           <nav className="space-y-1">
-            <button onClick={() => setActiveTab('account')} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', activeTab === 'account' ? 'bg-[#e9ecef] dark:bg-white/[0.08] text-slate-900 dark:text-[#f8fafc]' : 'text-slate-600 dark:text-[#94a3b8] hover:bg-slate-200/50 dark:hover:bg-white/[0.04]')}>
+            <button onClick={() => setActiveTab('account')} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', activeTab === 'account' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-[#94a3b8] hover:bg-white/[0.04]')}>
               <User className="w-4 h-4" /> Profile
             </button>
-            <button onClick={() => setActiveTab('security')} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', activeTab === 'security' ? 'bg-[#e9ecef] dark:bg-white/[0.08] text-slate-900 dark:text-[#f8fafc]' : 'text-slate-600 dark:text-[#94a3b8] hover:bg-slate-200/50 dark:hover:bg-white/[0.04]')}>
+            <button onClick={() => setActiveTab('security')} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', activeTab === 'security' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-[#94a3b8] hover:bg-white/[0.04]')}>
               <Shield className="w-4 h-4" /> Security
             </button>
-            <button onClick={() => setActiveTab('about')} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', activeTab === 'about' ? 'bg-[#e9ecef] dark:bg-white/[0.08] text-slate-900 dark:text-[#f8fafc]' : 'text-slate-600 dark:text-[#94a3b8] hover:bg-slate-200/50 dark:hover:bg-white/[0.04]')}>
+            <button onClick={() => setActiveTab('about')} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors', activeTab === 'about' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-[#94a3b8] hover:bg-white/[0.04]')}>
               <Info className="w-4 h-4" /> About
             </button>
           </nav>
@@ -415,25 +529,33 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
         {/* RIGHT CONTENT AREA */}
         <div className="flex-1 bg-white dark:bg-[#0b1220] overflow-hidden flex flex-col relative">
 
+          {/* DEDICATED HEADER FOR CLOSE BUTTON */}
+          <div className="h-14 flex items-center justify-end px-4 shrink-0 border-b border-slate-100 dark:border-white/[0.06]">
+            <button
+              onClick={onClose}
+              className="p-1.5 bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-[#94a3b8] hover:bg-slate-200 dark:hover:bg-white/[0.1] hover:text-slate-700 dark:hover:text-[#f8fafc] rounded-full transition-colors focus:outline-none"
+              title="Close Settings"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
           {isLoading ? (
             <div className="p-8 space-y-6 animate-pulse w-full max-w-3xl">
               <div className="h-12 bg-slate-100 dark:bg-white/[0.06] rounded-lg w-full"></div>
               <div className="h-12 bg-slate-100 dark:bg-white/[0.06] rounded-lg w-full"></div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col h-full overflow-y-auto">
+            <div className="settings-scrollbar flex-1 overflow-y-auto ">
 
-              <div className="p-8 max-w-3xl flex-1 w-full relative">
+              <div className="p-6 md:p-8 max-w-3xl w-full">
 
-                {/* --- PROFILE TAB (Team fields merged in) --- */}
                 {activeTab === 'account' && (
                   <div className="animate-in fade-in duration-200">
 
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <h2 className="text-xl font-bold text-slate-900 dark:text-[#f8fafc]">Profile Details</h2>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-300">
-                        <CheckCircle2 className="w-3 h-3" /> Institutional Verified
-                      </span>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-[#f8fafc]">Profile</h2>
+                    
                     </div>
                     <p className="text-[13px] text-slate-500 dark:text-[#94a3b8] mb-6">
                       {selectedSchool?.name
@@ -442,68 +564,88 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                     </p>
 
                     <div>
-
-                      {/* Avatar — hover to shuffle, corner × to reset */}
+                      {/* Avatar */}
                       <FieldRow label="Avatar">
-                        <div className="relative group w-14 h-14">
-                          <img
-                            src={buildAvatarUrl(formData.avatar_seed || user?.id || 'coach')}
-                            alt="Coach avatar"
-                            className="w-14 h-14 rounded-full border border-slate-200 dark:border-white/[0.08] shadow-sm bg-slate-100 dark:bg-white/[0.04] object-cover"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleShuffleAvatar}
-                            title="Shuffle avatar"
-                            className="absolute inset-0 rounded-full flex items-center justify-center bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Shuffle className="w-5 h-5 text-white" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleResetAvatar}
-                            title="Reset to default"
-                            className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-white/[0.15] shadow flex items-center justify-center text-slate-500 dark:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 hover:border-red-200 dark:hover:border-red-500/30"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                        <div className="flex justify-end">
+                          <div className="relative group w-11 h-11">
+                            <img
+                              src={buildAvatarUrl(formData.avatar_seed || user?.id || 'coach')}
+                              alt="Coach avatar"
+                              className="w-11 h-11 rounded-full border border-slate-200 dark:border-white/[0.08] shadow-sm bg-slate-100 dark:bg-white/[0.04] object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleShuffleAvatar}
+                              title="Shuffle avatar"
+                              className="absolute inset-0 rounded-full flex items-center justify-center bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Shuffle className="w-5 h-5 text-white" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleResetAvatar}
+                              title="Reset to default"
+                              className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-white/[0.15] shadow flex items-center justify-center text-slate-500 dark:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 hover:border-red-200 dark:hover:border-red-500/30"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </FieldRow>
 
                       {/* Full name */}
-                      <FieldRow label="Full name" tag={<span className="text-[11px] font-semibold text-sky-600 dark:text-[#7dd3fc]">Official DepEd / CHED Name</span>}>
+                      <FieldRow label="Full name">
                         <div className="relative">
                           <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#64748b]" />
                           <input
                             type="text"
                             value={formData.full_name}
                             onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                            className="w-full pl-9 pr-3 py-2.5 bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.1] rounded-xl text-sm text-slate-900 dark:text-[#f8fafc] shadow-sm outline-none focus:border-sky-400 dark:focus:border-[#7dd3fc]/40 focus:ring-2 focus:ring-sky-500/10 dark:focus:ring-[#7dd3fc]/10 transition-colors"
+                            onFocus={handleTypingFocus}
+                            onBlur={handleTypingBlur}
+                            className={cn(sharedInputBase, "pl-9")}
                           />
                         </div>
                       </FieldRow>
 
                       {/* Tel. No. */}
-                      <FieldRow label="Tel. No." hint="Used for urgent screening committee callbacks & SMS alerts.">
-                        <PhilippinePhoneInput value={formData.phone} onChange={(v) => setFormData({ ...formData, phone: v })} />
+                      <FieldRow label="Tel. No.">
+                        <div className="flex justify-end">
+                          <div className="w-full">
+                            <PhilippinePhoneInput value={formData.phone} onChange={(v) => setFormData({ ...formData, phone: v })} />
+                          </div>
+                        </div>
                       </FieldRow>
 
-                      {/* Date of Birth */}
-                      <FieldRow label="Date of Birth" hint="Age confirmation for collegiate coaching regulatory brackets.">
-                        <input
-                          type="date"
-                          value={formData.dob}
-                          onChange={e => setFormData({ ...formData, dob: e.target.value })}
-                          className="w-full px-3 py-2.5 bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.1] rounded-xl text-sm text-slate-900 dark:text-[#f8fafc] shadow-sm outline-none focus:border-sky-400 dark:focus:border-[#7dd3fc]/40 focus:ring-2 focus:ring-sky-500/10 dark:focus:ring-[#7dd3fc]/10 transition-colors [color-scheme:light] dark:[color-scheme:dark]"
-                        />
+                      {/* Date of Birth using PremiumDateTimePicker */}
+                      <FieldRow label="Date of Birth">
+                        <div className="flex justify-end">
+                          <div className="w-full">
+                            <PremiumDateTimePicker
+                              label="Date"
+                              value={formData.dob || null}
+                              onChange={(v) => setFormData({ ...formData, dob: v.split('T')[0] })}
+                              showTime={false}
+                              placeholder="dd/mm/yyyy"
+                              minYear={1900}
+                              maxYear={new Date().getFullYear()}
+                              width='full'
+                              height='h-11'
+                            />
+                          </div>
+                        </div>
                       </FieldRow>
 
                       {/* Sex */}
                       <FieldRow label="Sex">
-                        <SexOption value={formData.gender} onChange={(v) => setFormData({ ...formData, gender: v })} options={['Male', 'Female']} />
+                        <div className="flex justify-end">
+                           <div className="w-full">
+                             <SexOption value={formData.gender} onChange={(v) => setFormData({ ...formData, gender: v })} options={['Male', 'Female']} />
+                           </div>
+                        </div>
                       </FieldRow>
 
-                      {/* Institution (merged from Team tab) */}
+                      {/* Institution */}
                       <FieldRow label="Institution">
                         <SchoolList
                           value={institution}
@@ -512,7 +654,7 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                             setFormData({ ...formData, institution_id: id });
                           }}
                           placeholder="e.g. Western Institute of Technology"
-                          inputClassName="w-full px-3 py-2.5 bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.1] rounded-xl text-sm text-slate-900 dark:text-[#f8fafc] shadow-sm outline-none focus:border-sky-400 dark:focus:border-[#7dd3fc]/40 focus:ring-2 focus:ring-sky-500/10 dark:focus:ring-[#7dd3fc]/10 transition-colors"
+                          inputClassName={cn(sharedInputBase, "pl-3")}
                         />
                       </FieldRow>
 
@@ -520,7 +662,6 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                       <FieldRow
                         label="Primary Sport"
                         align="start"
-                        tag={<span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Official Division Allocation</span>}
                       >
                         <SportDropdown
                           value={formData.sport}
@@ -529,8 +670,8 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                           placeholder="Select your sport"
                         />
 
-                        <div className="flex items-center gap-2 flex-wrap mt-3">
-                          <span className="text-[11px] font-medium text-slate-500 dark:text-[#94a3b8] mr-1">Secondary Discipline:</span>
+                        <div className="flex items-center justify-end gap-2 flex-wrap mt-3">
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-[#94a3b8] mr-1">Secondary Sport:</span>
                           {formData.secondary_disciplines.map((id) => (
                             <span
                               key={id}
@@ -556,35 +697,32 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                             <button
                               type="button"
                               onClick={() => setAddingDiscipline(true)}
-                              className="inline-flex items-center gap-1 rounded-md border border-dashed border-slate-300 dark:border-white/[0.15] px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-[#94a3b8] hover:border-slate-400 dark:hover:border-white/[0.3] hover:text-slate-700 dark:hover:text-[#f8fafc] transition-colors"
+                              className="inline-flex items-center gap-1 rounded-md border border-dashed border-slate-300 dark:border-white/[0.15] px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-[#94a3b8] hover:border-blue-600 dark:hover:border-[#7dd3fc]/60 hover:text-blue-600 dark:hover:text-[#7dd3fc] transition-colors"
                             >
-                              <Plus className="w-3 h-3" /> Add Discipline
+                              <Plus className="w-3 h-3" /> Add Secondary
                             </button>
                           )}
                         </div>
                       </FieldRow>
 
-                      {/* Sport Classification (derived, read-only) */}
-                      <FieldRow label="Sport Classification" hint="Based on your Primary Sport setting.">
-                        <span className="inline-block px-3 py-1.5 bg-blue-50 dark:bg-[#adc6ff]/10 text-blue-700 dark:text-[#adc6ff] font-bold text-sm rounded-lg border border-blue-200/60 dark:border-[#adc6ff]/20">
-                          {formatSportTeamName(formData.sport)}
-                        </span>
-                      </FieldRow>
+                  
 
-                      {/* Team Motto (merged from Team tab) */}
-                      <FieldRow label="Team Motto / Subtitle" align="start" hint="Appears under your team name in the dashboard.">
+                      {/* Team Motto */}
+                      <FieldRow label="Team Motto / Subtitle" align="start" >
                         <textarea
                           value={formData.team_motto}
                           onChange={e => setFormData({ ...formData, team_motto: e.target.value })}
+                          onFocus={handleTypingFocus}
+                          onBlur={handleTypingBlur}
                           placeholder="e.g. We swim together, we win together"
                           rows={3}
-                          className="w-full px-3 py-2.5 bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.1] rounded-xl text-sm text-slate-900 dark:text-[#f8fafc] shadow-sm outline-none focus:border-sky-400 dark:focus:border-[#7dd3fc]/40 focus:ring-2 focus:ring-sky-500/10 dark:focus:ring-[#7dd3fc]/10 transition-colors resize-none"
+                          className={cn(sharedInputBase, "pl-3 resize-none")}
                         />
                       </FieldRow>
 
                       {/* Institutional Email */}
-                      <FieldRow label="Institutional Email" border={false}>
-                        <div className="flex items-center justify-between gap-3">
+                      <FieldRow label="Institutional Email" border={true}>
+                        <div className="flex items-center justify-end gap-3">
                           <div className="flex items-center gap-2 min-w-0">
                             <Mail className="w-4 h-4 text-slate-400 dark:text-[#64748b] shrink-0" />
                             <span className="text-sm text-slate-700 dark:text-[#f8fafc] truncate">{user?.email || 'No institutional email on file'}</span>
@@ -596,6 +734,32 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                           )}
                         </div>
                       </FieldRow>
+
+                      {/* APPEARANCE SEGMENTED CONTROL */}
+                      <FieldRow label="Appearance" border={false}>
+                        <div className="flex justify-end">
+                          <div className="flex items-center p-1 bg-slate-100 dark:bg-[#0c1324] rounded-xl border border-slate-200 dark:border-white/[0.06] w-fit">
+                            {(['system', 'light', 'dark'] as const).map((mode) => (
+                              <button
+                                key={mode}
+                                onClick={() => handleThemeChange(mode)}
+                                title={mode.charAt(0).toUpperCase() + mode.slice(1)}
+                                className={cn(
+                                  "w-10 h-8 flex items-center justify-center rounded-lg transition-all duration-200 focus:outline-none",
+                                  appTheme === mode
+                                    ? "bg-white dark:bg-[#1e293b] text-blue-600 dark:text-[#adc6ff] shadow-sm ring-1 ring-slate-200 dark:ring-white/[0.06]"
+                                    : "text-slate-500 dark:text-[#94a3b8] hover:text-slate-900 dark:hover:text-[#f8fafc]"
+                                )}
+                              >
+                                {mode === 'system' && <Monitor className="w-4 h-4" />}
+                                {mode === 'light' && <Sun className="w-4 h-4" />}
+                                {mode === 'dark' && <Moon className="w-4 h-4" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </FieldRow>
+
                     </div>
 
                     {/* Screening Notifications */}
@@ -655,44 +819,20 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
                       </div>
                     </div>
 
-                    {/* Institutional Delegation Scope */}
-                    <div className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.03] p-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center shrink-0">
-                          <Landmark className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                            Institutional Delegation Scope
-                          </p>
-                          <p className="text-[13px] font-bold text-slate-900 dark:text-[#f8fafc] truncate">
-                            {selectedSchool?.name || institution || 'No institution on file'}
-                            {(selectedSchool as any)?.nickname ? ` · ${(selectedSchool as any).nickname}` : ''}
-                          </p>
-                          {(selectedSchool as any)?.department && (
-                            <p className="text-[11px] text-slate-500 dark:text-[#94a3b8] truncate">
-                              {(selectedSchool as any).department}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-slate-600 dark:text-[#cbd5e1]">
-                        Scope: {athleteCount} Varsity Athlete{athleteCount === 1 ? '' : 's'}
-                      </span>
-                    </div>
+             
                   </div>
                 )}
 
                 {/* --- SECURITY & ABOUT TABS --- */}
                 {activeTab === 'security' && (
-                  <div className="animate-in fade-in duration-200">
+                  <div className="animate-in fade-in duration-200 mb-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-[#f8fafc] mb-8">Security &amp; Privacy</h2>
                     <div className="flex items-center justify-center h-64 border-2 border-dashed border-slate-200 dark:border-white/[0.08] rounded-xl text-slate-400 dark:text-[#64748b] text-sm">Security Settings coming soon...</div>
                   </div>
                 )}
 
                 {activeTab === 'about' && (
-                  <div className="animate-in fade-in duration-200">
+                  <div className="animate-in fade-in duration-200 mb-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-[#f8fafc] mb-8">About</h2>
                     <div className="flex items-center justify-center h-64 border-2 border-dashed border-slate-200 dark:border-white/[0.08] rounded-xl text-slate-400 dark:text-[#64748b] text-sm">App Information coming soon...</div>
                   </div>

@@ -4,7 +4,7 @@ import App from './App.tsx'
 import './index.css'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+//import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,8 +23,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <App />
       
-      {/* 4. Add the DevTools (Only visible in development mode) */}
-      <ReactQueryDevtools initialIsOpen={false} position="bottom" />
+      {/* 4. Add the DevTools (Only visible in development mode) 
+      <ReactQueryDevtools initialIsOpen={false} position="bottom" /> */}
     </QueryClientProvider>
   </React.StrictMode>,
 )
