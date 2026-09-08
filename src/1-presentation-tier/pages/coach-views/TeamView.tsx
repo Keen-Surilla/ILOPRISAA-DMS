@@ -728,6 +728,8 @@ export default function TeamView() {
 
     setEditAthlete({
       name: '',
+      gender: '',
+      sport: '',
       email: '',
       division: '',
       year_level: '',
