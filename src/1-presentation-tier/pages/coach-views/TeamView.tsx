@@ -733,8 +733,6 @@ const handleCloseEditModal = () => {
     // FIX: Added sport and gender here
     setEditAthlete({
       name: '',
-      gender: '',
-      sport: '',
       email: '',
       sport: '',
       gender: '',

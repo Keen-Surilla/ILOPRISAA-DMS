@@ -12,6 +12,7 @@ const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/Commit
 const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
 const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/SuperAdminDashboard'));
 const AcceptInvitePage = lazy(() => import('./1-presentation-tier/pages/AcceptInvitePage'));
+const LearnMore = lazy(() => import('./1-presentation-tier/pages/LearnMore'));
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
@@ -52,6 +53,7 @@ export default function App() {
         <Suspense>
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/learn-more" element={<LearnMore />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />

@@ -1,11 +1,28 @@
 import { useEffect, useState, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Logo2 from '../../../assets/Frame 100.svg';
 // 1. Import smoothScrollTo here:
 import { NAV_LINKS, smoothScrollTo } from './functions';
 
-export function Header() {
+const LEARN_MORE_NAV_LINKS = [
+  { id: 'why', label: 'Why ILOPRISAA' },
+  { id: 'workflow', label: 'How it works' },
+  { id: 'roles', label: 'Roles' },
+  { id: 'features', label: 'Features' },
+] as const;
+
+type HeaderProps = {
+  variant?: 'landing' | 'learn-more';
+};
+
+export function Header({ variant }: HeaderProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isLearnMore = variant === 'learn-more' || location.pathname === '/learn-more';
+  const navLinks = isLearnMore ? LEARN_MORE_NAV_LINKS : NAV_LINKS;
+  const renderedNavLinks = isLearnMore ? [{ id: 'home', label: 'Home' }, ...navLinks] : navLinks;
   const [scrolled, setScrolled] = useState(false);
-  const [activeSection, setActiveSection] = useState('home');
+  const [activeSection, setActiveSection] = useState(isLearnMore ? 'why' : 'home');
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0, opacity: 0 });
   
   const navRefs = useRef<(HTMLAnchorElement | null)[]>([]);
@@ -31,16 +48,16 @@ export function Header() {
       { rootMargin: '-81px 0px -60% 0px', threshold: 0 }
     );
 
-    NAV_LINKS.forEach((link) => {
+    navLinks.forEach((link) => {
       const el = document.getElementById(link.id);
       if (el) observer.observe(el);
     });
 
     return () => observer.disconnect();
-  }, []);
+  }, [navLinks]);
 
   useEffect(() => {
-    const activeIndex = NAV_LINKS.findIndex((link) => link.id === activeSection);
+    const activeIndex = renderedNavLinks.findIndex((link) => link.id === activeSection);
     const activeEl = navRefs.current[activeIndex];
 
     if (activeEl) {
@@ -50,26 +67,30 @@ export function Header() {
         opacity: 1,
       });
     }
-  }, [activeSection]);
+  }, [activeSection, renderedNavLinks]);
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
-    e.preventDefault(); 
+    e.preventDefault();
+
+    if (isLearnMore && id === 'home') {
+      navigate('/');
+      return;
+    }
+
     isClickScrolling.current = true;
     setActiveSection(id);
-    
-    // 2. Use the new global smoothScrollTo function!
     smoothScrollTo(id);
 
     if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
     scrollTimeout.current = setTimeout(() => {
       isClickScrolling.current = false;
-    }, 1000); 
+    }, 1000);
   };
 
   return (
     <header className={`fixed inset-x-0 top-0 z-50 border-b bg-white/80 backdrop-blur-xl transition-colors duration-300 dark:bg-[#0b1120]/80 ${scrolled ? 'border-slate-200 dark:border-slate-800/80' : 'border-transparent'}`}>
       <div className="mx-auto flex h-20 w-full max-w-[1600px] items-center justify-between gap-4 px-4 md:px-8 xl:px-12">
-        <a href="#home" onClick={(e) => handleNavClick(e, 'home')} className="group flex shrink-0 items-center gap-3">
+        <a href={isLearnMore ? '/' : '#home'} onClick={(e) => handleNavClick(e, 'home')} className="group flex shrink-0 items-center gap-3">
           <img src={Logo2} alt="ILOPRISAA" className="h-9 w-auto object-contain" />
         </a>
         
@@ -79,11 +100,11 @@ export function Header() {
             style={{ left: `${indicatorStyle.left}px`, width: `${indicatorStyle.width}px`, opacity: indicatorStyle.opacity }}
           />
 
-          {NAV_LINKS.map((link, i) => (
+          {renderedNavLinks.map((link, i) => (
             <a
               key={link.id}
               ref={(el) => { navRefs.current[i] = el; }}
-              href={`#${link.id}`}
+              href={isLearnMore && link.id === 'home' ? '/' : `#${link.id}`}
               onClick={(e) => handleNavClick(e, link.id)}
               className={`relative z-10 rounded-full px-4 py-1.5 text-xs font-semibold transition-colors duration-300 ${
                 activeSection === link.id
@@ -100,7 +121,7 @@ export function Header() {
      <button
         onClick={(e) => {
             e.preventDefault();
-            smoothScrollTo('access');
+            isLearnMore ? navigate('/login') : smoothScrollTo('access');
         }}
         className="inline-flex shrink-0 items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all hover:bg-blue-500 hover:shadow-[0_0_28px_rgba(59,130,246,0.65)] active:scale-95"
         >
