@@ -22,6 +22,24 @@ const ROLE_LABELS: Record<string, string> = {
   coach: 'Coach',
 };
 
+// Small wrapper so both the token lookup (guessable-token brute forcing) and
+// the password-set submit go through the same server-side, IP-based guard.
+// The actual block decision always lives in the security-guard Edge Function
+// / blocked_ips table — never in this component's state.
+async function checkSecurityGuard(flagged: boolean): Promise<{ blocked: boolean; reason?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('security-guard', { body: { flagged } });
+    if (error) {
+      console.error('security-guard check failed:', error);
+      return { blocked: false }; // fail open on infra errors
+    }
+    return { blocked: !!data?.blocked, reason: data?.reason };
+  } catch (err) {
+    console.error('security-guard check failed:', err);
+    return { blocked: false };
+  }
+}
+
 export default function AcceptInvitePage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -46,6 +64,17 @@ export default function AcceptInvitePage() {
         return;
       }
 
+      // A wrong/guessed token is exactly the signature of someone brute-forcing
+      // invite links, so an initial (unflagged) guard check runs first; if the
+      // lookup then fails, we retroactively count it as suspicious below.
+      const preCheck = await checkSecurityGuard(false);
+      if (cancelled) return;
+      if (preCheck.blocked) {
+        setPageState('invalid');
+        setError('Access from your network has been temporarily restricted. Please try again later or contact an administrator.');
+        return;
+      }
+
       const { data, error: rpcError } = await supabase
         .rpc('get_invite_by_token', { p_token: token })
         .single();
@@ -53,6 +82,9 @@ export default function AcceptInvitePage() {
       if (cancelled) return;
 
       if (rpcError || !data) {
+        // Flag this attempt server-side; repeated invalid tokens from the
+        // same IP will trip the suspicious-input threshold.
+        await checkSecurityGuard(true);
         setPageState('invalid');
         setError('This invite link is invalid.');
         return;
@@ -97,6 +129,15 @@ const handleSubmit = async (e: FormEvent) => {
 
     setIsSubmitting(true);
     try {
+      // Server-side flood/abuse check before touching Auth. Password content
+      // is deliberately never pattern-checked here — see the note on
+      // containsInjectionSignature in payloadValidators.ts for why.
+      const guard = await checkSecurityGuard(false);
+      if (guard.blocked) {
+        setError('Access from your network has been temporarily restricted. Please try again later or contact an administrator.');
+        return;
+      }
+
       // Magic link already created session; set password on authenticated account
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
