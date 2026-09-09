@@ -1,13 +1,11 @@
-import { useState, lazy } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import type { UserRole } from '../../../3-data-tier/types/database.types.extras';
 import Logo2 from "../../../assets/Frame 100.svg";
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { PanelLeft, LogOut, Settings, Info, ChevronRight } from 'lucide-react';
-
-
+import { PanelLeft, LogOut, Settings, Info, ChevronRight, ChevronDown } from 'lucide-react';
 
 export interface NavItem {
   id: string;
@@ -27,6 +25,9 @@ interface PortalShellProps {
   user?: any;
   navGroups: NavGroup[]; 
   children: ReactNode;
+  onSettingsClick?: () => void;
+  avatarUrl?: string;
+  userSubtitle?: string; // Added to accept the Sport (or any sub-label)
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -37,16 +38,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   athlete: 'Athlete Portal',
 };
 
-// Add onSettingsClick to the interface
-interface PortalShellProps {
-  portalTitle: string;
-  user?: any;
-  navGroups: NavGroup[]; 
-  children: ReactNode;
-  onSettingsClick?: () => void; 
-}
-
-export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, children }: PortalShellProps) {
+export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, avatarUrl, userSubtitle, children }: PortalShellProps) {
   const navigate = useNavigate();
   const { user, role, signOut } = useAuthStore();
 
@@ -172,7 +164,7 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
                       type="button"
                       onClick={() => {
                         setIsAccountMenuOpen(false);
-                        onSettingsClick(); // <-- CALL THE PROP INSTEAD OF NAVIGATING
+                        onSettingsClick(); 
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-slate-100 transition-colors duration-150"
                     >
@@ -221,16 +213,27 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
               isSidebarOpen ? 'gap-3 px-2 py-2 justify-start' : 'justify-center p-2'
             }`}
           >
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-700 text-slate-200 text-xs font-bold shrink-0 uppercase">
-              {user?.full_name?.[0] ?? user?.email?.[0] ?? 'U'}
+            {/* AVATAR DISPLAY */}
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-700 text-slate-200 text-xs font-bold shrink-0 uppercase overflow-hidden">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                user?.full_name?.[0] ?? user?.email?.[0] ?? 'U'
+              )}
             </div>
+
             <div
-              className={`flex-1 min-w-0 text-left overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
-                isSidebarOpen ? 'opacity-100 max-w-[160px]' : 'opacity-0 max-w-0'
+              className={`flex flex-1 items-center justify-between min-w-0 overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+                isSidebarOpen ? 'opacity-100 max-w-[220px]' : 'opacity-0 max-w-0'
               }`}
             >
-              <p className="text-sm font-bold text-slate-200 truncate">{user?.full_name ?? 'User'}</p>
-              <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+              <div className="flex flex-col items-start min-w-0 pr-2">
+                <p className="text-sm font-bold text-slate-200 truncate w-full text-left">{user?.full_name ?? 'User'}</p>
+                <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide truncate w-full text-left">
+                  {userSubtitle || (role ? ROLE_LABELS[role as UserRole] : 'User')}
+                </p>
+              </div>
+              <ChevronDown className="w-4 h-4 shrink-0 text-slate-500" />
             </div>
           </button>
         </div>

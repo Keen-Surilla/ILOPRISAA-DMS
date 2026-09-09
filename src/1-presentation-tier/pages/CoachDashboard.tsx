@@ -980,8 +980,11 @@ export default function CoachDashboard() {
 
   const avatarSeed = (coachProfile as any)?.avatar_seed || user?.id || 'coach';
   const profileName = user?.full_name || user?.email || 'Coach Profile';
-  const profileSport = (user as Record<string, any>)?.sport || 'Coach';
-
+const rawSport = (coachProfile as any)?.sport;
+  const profileSport = rawSport 
+    ? rawSport.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) 
+    : 'No Sport Assigned';
+    
   // Tab switcher
   const renderActiveView = () => {
     let TabContent;
@@ -1023,6 +1026,8 @@ export default function CoachDashboard() {
       <PortalShell
         portalTitle="Coach Portal"
         onSettingsClick={() => setIsSettingsOpen(true)}
+        avatarUrl={buildAvatarUrl(avatarSeed)}
+        userSubtitle={profileSport}
         navGroups={[
           {
             label: null,
@@ -1067,17 +1072,6 @@ export default function CoachDashboard() {
                 <Bell className="w-[18px] h-[18px]" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white dark:ring-[#0c1324]" />
               </button>
-              <div className="flex items-center gap-3">
-                <img
-                  src={buildAvatarUrl(avatarSeed)}
-                  alt={profileName}
-                  className="w-9 h-9 rounded-full border border-slate-200 dark:border-white/[0.08] shadow-sm bg-slate-100 dark:bg-white/[0.04] object-cover shrink-0"
-                />
-                <div className="flex flex-col hidden sm:flex">
-                  <span className="text-[13px] font-semibold text-slate-900 dark:text-[#f8fafc] leading-tight">{profileName}</span>
-                  <span className="text-[10px] font-medium text-slate-600 dark:text-[#94a3b8] uppercase tracking-wide capitalize">{profileSport}</span>
-                </div>
-              </div>
             </div>
           </div>
 
