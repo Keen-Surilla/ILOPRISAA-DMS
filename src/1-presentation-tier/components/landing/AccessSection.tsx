@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, AlertTriangle, ShieldCheck, KeyRound, IdCard, Clock, Eye, EyeOff, UserX, ShieldAlert } from 'lucide-react';
+import { Lock, AlertTriangle, ShieldCheck, KeyRound, IdCard, Eye, EyeOff, UserX, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import { validateLoginInput, containsInjectionSignature } from '../../../2-application-tier/utils/validators/payloadValidators';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
 import { Reveal } from './functions';
 
 const LOCAL_WARNING_ESCALATION = 2;
+
+// Once remaining failed-login attempts drop to this number or fewer, warn
+// the person before the account actually locks, instead of the lock just
+// happening on the next wrong password with no notice.
+const REMAINING_ATTEMPTS_WARNING_THRESHOLD = 2;
 
 const IP_BLOCK_MESSAGE =
   'Access from your network has been temporarily restricted due to repeated flagged activity.';
@@ -29,6 +34,8 @@ type GuardResult = {
   expiresAt?: string;
   accountLocked?: boolean;
   accountExpiresAt?: string;
+  remainingAttempts?: number;
+  lockMinutes?: number;
 };
 
 type Restriction = { type: 'ip' | 'account'; expiresAt: Date | null } | null;
@@ -184,8 +191,21 @@ export function AccessSection() {
         // if this submission is the one crossing the threshold, the lock
         // shows immediately instead of requiring one more attempt.
         const failResult = await callGuard({ loginFailed: true, email: safeEmail });
+
         if (failResult.accountLocked) {
           applyAccountLock(failResult.accountExpiresAt);
+        } else if (
+          typeof failResult.remainingAttempts === 'number' &&
+          failResult.remainingAttempts <= REMAINING_ATTEMPTS_WARNING_THRESHOLD
+        ) {
+          // Warn BEFORE the lock happens, not just when it does.
+          const n = failResult.remainingAttempts;
+          const mins = failResult.lockMinutes ?? 15;
+          setSecurityWarning(
+            n <= 0
+              ? `One more incorrect attempt will lock this account for ${mins} minutes.`
+              : `${n} more incorrect attempt${n === 1 ? '' : 's'} will lock this account for ${mins} minutes.`
+          );
         }
         return;
       }
@@ -355,10 +375,13 @@ export function AccessSection() {
                     />
                     <span className="text-xs text-slate-600 dark:text-slate-300">Remember this session (24h)</span>
                   </label>
-                  <span className="flex items-center gap-1 font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                    <Clock className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
-                    2FA enforced
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/forgot-password')}
+                    className="font-mono text-[11px] font-semibold text-blue-600 transition-colors hover:text-blue-500 hover:underline dark:text-blue-400"
+                  >
+                    Forgot password?
+                  </button>
                 </div>
                 
                 <button

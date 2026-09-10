@@ -4,6 +4,7 @@ import { SecureErrorBoundary } from './1-presentation-tier/components/core/Secur
 import { ProtectedRoute } from './1-presentation-tier/components/core/ProtectedRoute';
 import { useAuthStore } from './2-application-tier/stores/authStore';
 import { supabase } from './3-data-tier/config/SupabaseClient';
+import { ForgotPasswordPage } from './1-presentation-tier/components/landing/ForgotPasswordPage';
 
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/school-admin/*" element={<ProtectedRoute allowedRoles={['school_admin']}><SchoolAdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />

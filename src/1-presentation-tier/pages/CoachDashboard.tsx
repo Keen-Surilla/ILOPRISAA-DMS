@@ -980,7 +980,7 @@ export default function CoachDashboard() {
 
   const avatarSeed = (coachProfile as any)?.avatar_seed || user?.id || 'coach';
   const profileName = user?.full_name || user?.email || 'Coach Profile';
-const rawSport = (coachProfile as any)?.sport;
+  const rawSport = (coachProfile as any)?.sport;
   const profileSport = rawSport 
     ? rawSport.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) 
     : 'No Sport Assigned';
