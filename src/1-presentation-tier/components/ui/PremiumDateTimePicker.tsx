@@ -99,8 +99,6 @@ export function PremiumDateTimePicker({
   const [viewYear, setViewYear] = useState(initial.y);
   const [viewMonth, setViewMonth] = useState(initial.m);
   const [selDay, setSelDay] = useState<number | null>(parsed ? parsed.d : null);
-  const [selYear, setSelYear] = useState(initial.y);
-  const [selMonth, setSelMonth] = useState(initial.m);
 
   const { hour12: initHour12, ampm: initAmpm } = to12Hour(initial.h24);
   const [hour12, setHour12] = useState(initHour12);
@@ -117,15 +115,58 @@ export function PremiumDateTimePicker({
     return () => document.removeEventListener('mousedown', onOutside);
   }, []);
 
+  // Keep internal state in sync if the controlled `value` prop changes from
+  // outside (e.g. parent resets the field, or the same picker instance is
+  // reused for a different record). Skipped while open so we never yank a
+  // selection out from under an in-progress interaction.
+  useEffect(() => {
+    if (isOpen) return;
+    const next = parseValue(value);
+    const fallback = next ?? { y: now.getFullYear(), m: now.getMonth(), d: now.getDate(), h24: now.getHours(), min: 0 };
+    setViewYear(fallback.y);
+    setViewMonth(fallback.m);
+    setSelDay(next ? next.d : null);
+    const { hour12: h12, ampm: ap } = to12Hour(fallback.h24);
+    setHour12(h12);
+    setMinute(fallback.min);
+    setAmpm(ap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, isOpen]);
+
   const grid = useMemo(() => buildGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+
+  // Updates the displayed year/month. If a day is already selected, the day
+  // is clamped to fit the new month and, for date-only pickers, the change
+  // is committed immediately.
+  //
+  // Year/month and the selected day used to live in two separate pieces of
+  // state (viewYear/viewMonth for the grid you see, selYear/selMonth for
+  // what actually got saved), kept in sync via a nested setState-inside-
+  // setState call. That nesting is unsafe: React can invoke a functional
+  // updater more than once (e.g. under Strict Mode), so the first year you
+  // picked in a session could get silently dropped and only "stick" on a
+  // later attempt. There is now only one source of truth for year/month, so
+  // there's nothing left to fall out of sync.
+  const applyYearMonth = useCallback((y: number, m: number) => {
+    setViewYear(y);
+    setViewMonth(m);
+    if (selDay === null) return; // nothing selected yet, just browsing
+    const clampedDay = Math.min(selDay, daysInMonth(y, m));
+    if (clampedDay !== selDay) setSelDay(clampedDay);
+    if (!showTime) {
+      onChange(toLocalISO(y, m, clampedDay, 0, 0));
+    }
+  }, [selDay, showTime, onChange]);
 
   const shiftMonth = useCallback((delta: number) => {
     let m = viewMonth + delta;
     let y = viewYear;
     while (m < 0) { m += 12; y -= 1; }
     while (m > 11) { m -= 12; y += 1; }
-    if (y >= minYear && y <= maxYear) { setViewYear(y); setViewMonth(m); }
-  }, [viewMonth, viewYear, minYear, maxYear]);
+    if (y >= minYear && y <= maxYear) applyYearMonth(y, m);
+  }, [viewMonth, viewYear, minYear, maxYear, applyYearMonth]);
 
   const years = useMemo(() => {
     const list: number[] = [];
@@ -133,11 +174,16 @@ export function PremiumDateTimePicker({
     return list;
   }, [minYear, maxYear]);
 
-  const pickDay = useCallback((day: number) => {
+  // For date-only pickers (showTime=false, e.g. Date of Birth) there is
+  // nothing left to configure after a day is clicked, so commit and close
+  // immediately rather than requiring a separate "Apply" click.
+  const selectDay = useCallback((day: number) => {
     setSelDay(day);
-    setSelYear(viewYear);
-    setSelMonth(viewMonth);
-  }, [viewYear, viewMonth]);
+    if (!showTime) {
+      onChange(toLocalISO(viewYear, viewMonth, day, 0, 0));
+      setIsOpen(false);
+    }
+  }, [viewYear, viewMonth, showTime, onChange]);
 
   const bumpHour = useCallback((dir: 1 | -1) => {
     setHour12((h) => {
@@ -165,8 +211,6 @@ export function PremiumDateTimePicker({
     const t = new Date();
     setViewYear(t.getFullYear());
     setViewMonth(t.getMonth());
-    setSelYear(t.getFullYear());
-    setSelMonth(t.getMonth());
     setSelDay(t.getDate());
   }, []);
 
@@ -182,14 +226,14 @@ export function PremiumDateTimePicker({
     const day = selDay ?? 1;
     const h24 = showTime ? to24Hour(hour12, ampm) : 0;
     const min = showTime ? minute : 0;
-    onChange(toLocalISO(selYear, selMonth, day, h24, min));
+    onChange(toLocalISO(viewYear, viewMonth, day, h24, min));
     setIsOpen(false);
-  }, [selYear, selMonth, selDay, hour12, ampm, minute, showTime, onChange]);
+  }, [viewYear, viewMonth, selDay, hour12, ampm, minute, showTime, onChange]);
 
   const displayText = parsed && selDay !== null
     ? showTime
-      ? `${MONTH_NAMES[selMonth].slice(0, 3)} ${pad(selDay)}, ${selYear} | ${pad(hour12)}:${pad(minute)} ${ampm}`
-      : `${pad(selMonth + 1)}/${pad(selDay)}/${selYear}`
+      ? `${MONTH_NAMES[viewMonth].slice(0, 3)} ${pad(selDay)}, ${viewYear} | ${pad(hour12)}:${pad(minute)} ${ampm}`
+      : `${pad(viewMonth + 1)}/${pad(selDay)}/${viewYear}`
     : null;
 
   return (
@@ -221,7 +265,7 @@ export function PremiumDateTimePicker({
 
       {/* Dropdown Popup Card */}
       {isOpen && (
-        <div className={`settings-scrollbar absolute left-0 sm:left-auto sm:right-0 z-[80] mt-2 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#0b1120] shadow-2xl p-4 text-slate-900 dark:text-slate-100 ${showTime ? 'w-[380px]' : 'w-[320px]'} max-w-[92vw]`}>
+        <div className={`settings-scrollbar absolute left-0 sm:left-auto sm:left-0 z-[80] mt-2 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-[#0b1120] shadow-2xl p-4 text-slate-900 dark:text-slate-100 ${showTime ? 'w-[380px]' : 'w-[320px]'} max-w-[92vw]`}>
           <div className={`flex ${showTime ? 'gap-4' : 'flex-col gap-3'}`}>
             <div className="flex-1">
               <div className="flex items-center justify-between gap-1 mb-3">
@@ -236,7 +280,7 @@ export function PremiumDateTimePicker({
 
                 <select
                   value={viewMonth}
-                  onChange={(e) => setViewMonth(Number(e.target.value))}
+                  onChange={(e) => applyYearMonth(viewYear, Number(e.target.value))}
                   className="settings-scrollbar text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 bg-slate-50 dark:bg-slate-800 focus:outline-none"
                 >
                   {MONTH_NAMES.map((mn, i) => (
@@ -246,7 +290,7 @@ export function PremiumDateTimePicker({
 
                 <select
                   value={viewYear}
-                  onChange={(e) => setViewYear(Number(e.target.value))}
+                  onChange={(e) => applyYearMonth(Number(e.target.value), viewMonth)}
                   className="settings-scrollbar text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 bg-slate-50 dark:bg-slate-800 focus:outline-none"
                 >
                   {years.map((y) => (
@@ -269,14 +313,14 @@ export function PremiumDateTimePicker({
                   <div key={w} className="text-[10px] font-bold text-slate-400 uppercase pb-1">{w}</div>
                 ))}
                 {grid.map((cell, i) => {
-                  const isSelected = cell.current && selDay === cell.day && selMonth === viewMonth && selYear === viewYear;
+                  const isSelected = cell.current && selDay === cell.day;
                   const isToday = cell.current && viewYear === now.getFullYear() && viewMonth === now.getMonth() && cell.day === now.getDate();
                   return (
                     <button
                       type="button"
                       key={i}
                       disabled={!cell.current}
-                      onClick={() => cell.current && pickDay(cell.day)}
+                      onClick={() => cell.current && selectDay(cell.day)}
                       className={`text-xs h-8 w-8 mx-auto rounded-xl flex items-center justify-center transition-colors font-medium ${
                         !cell.current
                           ? 'text-slate-300 dark:text-slate-600 cursor-default'

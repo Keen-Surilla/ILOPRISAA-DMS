@@ -10,13 +10,14 @@ import {
   Search,
   ArrowUpDown,
   Pencil,
-  Trash2,
+  Archive,
   Clock,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { TeamBulkUploadModal } from '../../components/ui/TeamBulkUploadModal';
+import { AddAthleteModal } from '../../components/ui/AddAthleteModal';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import { TableSkeleton } from '../../components/ui/SkeletonLoading';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
@@ -33,6 +34,10 @@ import { getProfile } from '../../../3-data-tier/services/profileService';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
 import { DivisionSelect } from '../../components/ui/DivisionSelect';
 import { SexOption } from '../../components/ui/SexOption';
+import { AthleteExportSelectModal } from '../../components/ui/AthleteExportSelectModal';
+import { getExportData } from '../../../3-data-tier/api/exportApi';
+// TODO: confirm this path once the tertiary generator's real location is settled
+import { generatePrisaaForm01BTertiary } from '../../../3-data-tier/services/prisaaForm01BTertiary';
 
 const ILOPRISAA_SCHOOLS: Record<string, string> = {
   'western institute of technology': 'WIT',
@@ -85,6 +90,83 @@ export function formatSportTeamName(rawSport?: string | null): string {
   return `${cleanSport} Team`;
 }
 
+// Reverse of ILOPRISAA_SCHOOLS (abbreviation -> full, properly-cased name).
+// TODO: verify `profile.institution_id` actually stores one of these abbreviations
+// (e.g. "WIT") rather than a full name or a raw DB id — this lookup assumes it does.
+const SCHOOL_ABBREVIATION_TO_FULL_NAME: Record<string, string> = {
+  WIT: 'Western Institute of Technology',
+  CPU: 'Central Philippine University',
+  JBLFMU: 'John B. Lacson Foundation Maritime University',
+  HSCI: 'Hua Siong College of Iloilo',
+  SRIC: "St. Robert's International College",
+  IDC: "Iloilo Doctors' College",
+  ADI: 'Ateneo de Iloilo',
+  CSJ: 'Colegio de San Jose',
+  SICI: 'Santa Isabel College of Iloilo',
+  ISA: 'Iloilo Scholastic Academy',
+  SPUI: 'St. Paul University Iloilo',
+  USA: 'University of San Agustin',
+  IISF: 'Iloilo Integrated School Foundation',
+};
+
+export function getFullSchoolName(institutionId?: string | null): string {
+  if (!institutionId) return '';
+  const key = institutionId.trim().toUpperCase();
+  return SCHOOL_ABBREVIATION_TO_FULL_NAME[key] ?? institutionId;
+}
+
+// Best-effort fallback for when prisaa_academic_data has no lastName/firstName
+// filled in — splits the roster's single `name` field instead.
+// NOTE: this is a heuristic. Multi-word surnames (e.g. "de la Cruz") or names
+// with a suffix (Jr., III) will not split perfectly — worth a manual glance
+// at the generated form before submitting it anywhere official.
+// Only pulls a token out as a middle initial if it actually looks like one
+// (a single letter, optionally followed by a period) — a real given name
+// like "Grace" won't match this, so it stays part of firstName instead of
+// getting wrongly shortened to "G."
+function extractInitialIfPresent(words: string[]): { rest: string[]; initial: string } {
+  if (words.length < 2) return { rest: words, initial: '' };
+  const last = words[words.length - 1];
+  if (/^[A-Za-z]\.?$/.test(last)) {
+    return { rest: words.slice(0, -1), initial: last.replace('.', '').toUpperCase() };
+  }
+  return { rest: words, initial: '' };
+}
+
+export function splitFullName(fullName: string): {
+  lastName: string;
+  firstName: string;
+  middleInitial: string;
+} {
+  const trimmed = fullName.trim();
+  if (!trimmed) return { lastName: '', firstName: '', middleInitial: '' };
+
+  // Expected format from the Add Athlete form: "Last Name, First Name M.I."
+  if (trimmed.includes(',')) {
+    const [last, rest = ''] = trimmed.split(',').map((s) => s.trim());
+    const restParts = rest.split(/\s+/).filter(Boolean);
+    const { rest: firstNameParts, initial } = extractInitialIfPresent(restParts);
+    return {
+      lastName: last,
+      firstName: firstNameParts.join(' '),
+      middleInitial: initial,
+    };
+  }
+
+  // Fallback for names typed without the comma format.
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return { lastName: parts[0], firstName: '', middleInitial: '' };
+
+  const lastName = parts[parts.length - 1];
+  const { rest: firstNameParts, initial } = extractInitialIfPresent(parts.slice(0, -1));
+
+  return {
+    lastName,
+    firstName: firstNameParts.join(' '),
+    middleInitial: initial,
+  };
+}
+
 function getPrisaaAge(
   dob: string | null | undefined,
   eventYear: number
@@ -118,7 +200,7 @@ function EligibilityBadge({
 }) {
   if (status === 'ready') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
         <CheckCircle2 className="w-3.5 h-3.5" />
         Verified
       </span>
@@ -127,7 +209,7 @@ function EligibilityBadge({
 
   if (status === 'pending_verification') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 whitespace-nowrap">
         <Clock className="w-3.5 h-3.5" />
         Under Review
       </span>
@@ -135,7 +217,7 @@ function EligibilityBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 whitespace-nowrap">
       <AlertCircle className="w-3.5 h-3.5" />
       Action Required
     </span>
@@ -254,6 +336,126 @@ export default function TeamView() {
     isLoading,
   } = useTeamDashboardData(currentUserId);
 
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExportConfirm({
+    athleteIds,
+    level,
+  }: {
+    athleteIds: string[];
+    level: 'elementary' | 'secondary' | 'tertiary';
+  }) {
+    if (level !== 'tertiary') {
+      // Secondary/Elementary generators aren't built yet — tertiary only for now.
+      return;
+    }
+
+    setErrorMessage(null);
+
+    // Hard stop regardless of whatever the modal's own checkboxes allowed —
+    // the form has one MEN/WOMEN checkbox for the whole sheet, so a mixed
+    // selection can never be allowed to reach the generator.
+    const selectedAthletes = athletes.filter((a) => athleteIds.includes(a.id));
+    const distinctGenders = new Set(
+      selectedAthletes.map((a) => (a.gender ?? '').trim().toLowerCase()).filter(Boolean)
+    );
+    if (distinctGenders.size > 1) {
+      setErrorMessage(
+        'Selected athletes have different genders. A single Form 01B sheet can only contain athletes of the same gender.'
+      );
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const exportData = await getExportData(athleteIds);
+      const rosterById = new Map(athletes.map((a) => [a.id, a]));
+
+      const preparedExportData = exportData.map((a) => {
+        const rosterAthlete = rosterById.get(a.athleteId) as
+          | {
+              name?: string;
+              year_level?: string | null;
+              course?: string | null;
+              year_graduated_shs?: string | null;
+            }
+          | undefined;
+
+        const hasStructuredName =
+          a.academicData.lastName.trim() || a.academicData.firstName.trim();
+        const nameFallback =
+          !hasStructuredName && rosterAthlete?.name
+            ? splitFullName(rosterAthlete.name)
+            : null;
+
+        return {
+          ...a,
+          academicData: {
+            ...a.academicData,
+            lastName: nameFallback ? nameFallback.lastName : a.academicData.lastName,
+            firstName: nameFallback ? nameFallback.firstName : a.academicData.firstName,
+            middleInitial: nameFallback
+              ? nameFallback.middleInitial
+              : a.academicData.middleInitial,
+            // Year level, course, and year graduated from SHS all now live as
+            // real columns on team_members (not the old prisaa_academic_data
+            // JSONB, which nothing writes to) — read from the roster record.
+            yearLevel: a.academicData.yearLevel || rosterAthlete?.year_level || '',
+            course: a.academicData.course || rosterAthlete?.course || '',
+            yearGraduatedFromSHS:
+              a.academicData.yearGraduatedFromSHS || rosterAthlete?.year_graduated_shs || '',
+            // School presently enrolled = the coach's school, full name (not abbreviation).
+            schoolPresentlyEnrolled: getFullSchoolName(profile?.institution_id),
+          },
+        };
+      });
+
+
+      // `division` is education level (elementary/highschool/tertiary) — the
+      // actual gender field on team_members is `gender` ('Male'/'Female').
+      const firstAthlete = athletes.find((a) => a.id === athleteIds[0]) as
+        | { gender?: string | null }
+        | undefined;
+      const divisionGender =
+        (firstAthlete?.gender ?? '').toLowerCase() === 'female' ? 'WOMEN' : 'MEN';
+
+      const blob = await generatePrisaaForm01BTertiary(
+        preparedExportData,
+        {
+          cluster: 'Iloilo',
+          region: '6 - Western Visayas',
+          sportsEvent: profile?.sport ?? '',
+          divisionGender,
+        },
+        {
+          // TODO: confirm the actual coach-name field on `profile`
+          name: (profile as any)?.full_name ?? (profile as any)?.name ?? 'Coach',
+          photoBuffer: null,
+        }
+      );
+
+      downloadBlob(blob, `PRISAA-Form-01B-${Date.now()}.xlsx`);
+      setIsExportModalOpen(false);
+    } catch (err) {
+      console.error('Export failed:', err);
+      // TODO: surface this to the user instead of just logging it
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const {
     data: screeningRoster = [],
     isLoading: isLoadingScreening,
@@ -265,16 +467,6 @@ export default function TeamView() {
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const [newAthlete, setNewAthlete] = useState({
-    name: '',
-    email: '',
-    sport: '',
-    gender: '',
-    division: '',
-    year_level: '',
-    date_of_birth: '',
-  });
 
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
@@ -290,38 +482,18 @@ export default function TeamView() {
   const [isTeamBulkUploadOpen, setIsTeamBulkUploadOpen] =
     useState(false);
 
-  const [shouldRenderAddModal, setShouldRenderAddModal] =
-    useState(false);
-
-  const [isAddModalClosing, setIsAddModalClosing] =
-    useState(false);
-
   const [athleteToEdit, setAthleteToEdit] = useState<{
     id: string;
     name: string;
     email: string;
     date_of_birth: string;
-    division: string;
+    division: '' | 'elementary' | 'highschool' | 'tertiary';
     year_level: string;
+    course?: string;
+    year_graduated_shs?: string;
     sport: string;
-    gender: string;
+    gender: '' | 'Male' | 'Female';
   } | null>(null);
-
-  const [editAthlete, setEditAthlete] = useState({
-    name: '',
-    email: '',
-    sport: '',
-    gender: '',
-    division: '',
-    year_level: '',
-    date_of_birth: '',
-  });
-
-  useEffect(() => {
-    if (profile?.sport && !newAthlete.sport) {
-      setNewAthlete((current) => ({ ...current, sport: profile.sport || '' }));
-    }
-  }, [profile?.sport, newAthlete.sport]);
 
   const [divisionFilter, setDivisionFilter] =
     useState<(typeof DIVISION_FILTERS)[number]['key']>('all');
@@ -340,25 +512,6 @@ export default function TeamView() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const PAGE_SIZE = 6;
-
-  useEffect(() => {
-    if (isModalOpen) {
-      setShouldRenderAddModal(true);
-      setIsAddModalClosing(false);
-      return;
-    }
-
-    if (shouldRenderAddModal) {
-      setIsAddModalClosing(true);
-
-      const timeout = setTimeout(() => {
-        setShouldRenderAddModal(false);
-        setIsAddModalClosing(false);
-      }, 150);
-
-      return () => clearTimeout(timeout);
-    }
-  }, [isModalOpen, shouldRenderAddModal]);
 
   const screeningByAthleteId = useMemo(() => {
     return new Map(
@@ -476,99 +629,17 @@ export default function TeamView() {
     sortOrder,
   ]);
 
-  const addAthleteMutation = useMutation({
-    mutationFn: (athleteData: any) =>
-      teamApi.addAthlete(athleteData),
-
-onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['teamMembers', currentUserId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ['screeningRoster', currentUserId],
-      });
-      setIsModalOpen(false);
-
-      // FIX: Added sport and gender here
-      setNewAthlete({
-        name: '',
-        email: '',
-        sport: '',
-        gender: '',
-        division: '',
-        year_level: '',
-        date_of_birth: '',
-      });
-
-      setErrorMessage(null);
-    },
-
-    onError: (error: any) => {
-      setErrorMessage(
-        error?.message || 'Failed to add athlete.'
-      );
-    },
-  });
-
-  const updateAthleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!athleteToEdit) {
-        throw new Error('No athlete selected.');
-      }
-
-      return teamApi.updateAthlete(
-        athleteToEdit.id,
-        currentUserId,
-        {
-          name: editAthlete.name.trim(),
-          email: editAthlete.email.trim().toLowerCase(),
-          date_of_birth: editAthlete.date_of_birth,
-          division: editAthlete.division,
-          year_level: editAthlete.year_level || null,
-          sport: editAthlete.sport,
-          gender: editAthlete.gender,
-        }
-      );
-    },
-
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ['teamMembers', currentUserId],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ['screeningRoster', currentUserId],
-      });
-
-      setAthleteToEdit(null);
-
-      setEditAthlete({
-        name: '',
-        email: '',
-        sport: '',
-        gender: '',
-        division: '',
-        year_level: '',
-        date_of_birth: '',
-      });
-
-      setErrorMessage(null);
-    },
-
-    onError: (error: any) => {
-      setErrorMessage(
-        error?.message || 'Failed to update athlete.'
-      );
-    },
-  });
-
   const deleteAthleteMutation = useMutation({
     mutationFn: (id: string) =>
-      teamApi.deleteAthlete(id, currentUserId),
+      teamApi.archiveAthlete(id, currentUserId),
 
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['teamMembers', currentUserId],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ['archivedTeamMembers', currentUserId],
       });
 
       queryClient.invalidateQueries({
@@ -580,126 +651,15 @@ onSuccess: () => {
 
     onError: (error) => {
       console.error(
-        'Failed to delete athlete:',
+        'Failed to archive athlete:',
         error
       );
 
       alert(
-        'Failed to remove athlete. Please try again.'
+        'Failed to archive athlete. Please try again.'
       );
     },
   });
-
-  const handleAddAthlete = (
-    e: React.FormEvent
-  ) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    if (!currentUserId) {
-      setErrorMessage(
-        'Unable to identify your account. Please log in again.'
-      );
-      return;
-    }
-
-    const trimmedName =
-      newAthlete.name.trim();
-
-    if (!trimmedName) {
-      setErrorMessage(
-        "The athlete's name is required."
-      );
-      return;
-    }
-
-    if (trimmedName.length > 100) {
-      setErrorMessage(
-        "The athlete's name cannot exceed 100 characters."
-      );
-      return;
-    }
-
-    const cleanedEmail =
-      newAthlete.email.trim().toLowerCase();
-
-    if (!cleanedEmail.endsWith('@gmail.com')) {
-      setErrorMessage(
-        'Please use a valid Gmail address (@gmail.com).'
-      );
-      return;
-    }
-
-    if (!newAthlete.sport) {
-      setErrorMessage(
-        'Your coach profile does not have a sport assigned. Please set your primary sport in Settings first.'
-      );
-      return;
-    }
-
-    if (!newAthlete.gender) {
-      setErrorMessage(
-        "Please select the athlete's gender."
-      );
-      return;
-    }
-
-    if (!newAthlete.division) {
-      setErrorMessage(
-        "Please select the athlete's division."
-      );
-      return;
-    }
-
-    if (!newAthlete.date_of_birth) {
-      setErrorMessage(
-        "Please enter the athlete's date of birth."
-      );
-      return;
-    }
-
-    const dobDate =
-      new Date(newAthlete.date_of_birth);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (
-      Number.isNaN(dobDate.getTime()) ||
-      dobDate > today
-    ) {
-      setErrorMessage(
-        "Please enter a valid date of birth (it can't be in the future)."
-      );
-      return;
-    }
-
-    addAthleteMutation.mutate({
-      name: trimmedName,
-      email: cleanedEmail,
-      role: 'Athlete',
-      coach_id: currentUserId,
-      division: newAthlete.division,
-      year_level: newAthlete.year_level || null,
-      date_of_birth: newAthlete.date_of_birth,
-    });
-  };
-
-const handleCloseAddModal = () => {
-    setIsModalOpen(false);
-    setErrorMessage(null);
-
-    // FIX: Added sport and gender here
-    setNewAthlete({
-      name: '',
-      email: '',
-      sport: '',
-      gender: '',
-      division: '',
-      year_level: '',
-      date_of_birth: '',
-    });
-  };
 
   const handleOpenEdit = (member: typeof athletes[number]) => {
     setErrorMessage(null);
@@ -709,123 +669,13 @@ const handleCloseAddModal = () => {
       name: member.name,
       email: member.email,
       date_of_birth: member.date_of_birth ?? '',
-      division: member.division ?? '',
+      division: (member.division ?? '') as '' | 'elementary' | 'highschool' | 'tertiary',
       year_level: member.year_level ?? '',
+      course: (member as any).course ?? '',
+      year_graduated_shs: (member as any).year_graduated_shs ?? '',
       sport: member.sport ?? profile?.sport ?? '',
-      gender: member.gender ?? '',
+      gender: (member.gender ?? '') as '' | 'Male' | 'Female',
     });
-
-    setEditAthlete({
-      name: member.name,
-      email: member.email,
-      sport: member.sport ?? profile?.sport ?? '',
-      gender: member.gender ?? '',
-      date_of_birth: member.date_of_birth ?? '',
-      division: member.division ?? '',
-      year_level: member.year_level ?? '',
-    });
-  };
-
-const handleCloseEditModal = () => {
-    setAthleteToEdit(null);
-    setErrorMessage(null);
-
-    setEditAthlete({
-      name: '',
-      gender: '',
-      sport: '',
-      email: '',
-      division: '',
-      year_level: '',
-      date_of_birth: '',
-    });
-  };
-
-  const handleUpdateAthlete = (
-    e: React.FormEvent
-  ) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    const trimmedName =
-      editAthlete.name.trim();
-
-    if (!trimmedName) {
-      setErrorMessage(
-        "The athlete's name is required."
-      );
-      return;
-    }
-
-    if (trimmedName.length > 100) {
-      setErrorMessage(
-        "The athlete's name cannot exceed 100 characters."
-      );
-      return;
-    }
-
-    const cleanedEmail =
-      editAthlete.email.trim().toLowerCase();
-
-    if (!cleanedEmail.endsWith('@gmail.com')) {
-      setErrorMessage(
-        'Please use a valid Gmail address (@gmail.com).'
-      );
-      return;
-    }
-
-    if (!editAthlete.sport) {
-      setErrorMessage(
-        "The athlete's sport is required. Please set your primary sport in Settings first."
-      );
-      return;
-    }
-
-    if (!editAthlete.gender) {
-      setErrorMessage(
-        "Please select the athlete's gender."
-      );
-      return;
-    }
-
-    if (!editAthlete.division) {
-      setErrorMessage(
-        "Please select the athlete's division."
-      );
-      return;
-    }
-
-    if (!editAthlete.date_of_birth) {
-      setErrorMessage(
-        "Please enter the athlete's date of birth."
-      );
-      return;
-    }
-
-    const dobDate =
-      new Date(editAthlete.date_of_birth);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (
-      Number.isNaN(dobDate.getTime()) ||
-      dobDate > today
-    ) {
-      setErrorMessage(
-        "Please enter a valid date of birth (it can't be in the future)."
-      );
-      return;
-    }
-
-    if (!athleteToEdit) {
-      setErrorMessage(
-        'No athlete selected.'
-      );
-      return;
-    }
-
-    updateAthleteMutation.mutate();
   };
 
   const confirmDeleteAthlete = () => {
@@ -840,42 +690,42 @@ const handleCloseEditModal = () => {
     return (
       <div className="space-y-6 animate-pulse p-6">
         <div>
-          <div className="h-8 bg-slate-200 rounded-md w-64 mb-2" />
-          <div className="h-4 bg-slate-200 rounded-md w-96" />
+          <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-md w-64 mb-2" />
+          <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-md w-96" />
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl h-24" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl h-24" />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white border border-slate-200 rounded-xl h-24" />
-          <div className="bg-white border border-slate-200 rounded-xl h-24" />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl h-24" />
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl h-24" />
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-100">
-            <div className="h-6 bg-slate-200 rounded-md w-40 mb-2" />
-            <div className="h-4 bg-slate-200 rounded-md w-72" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-slate-100 dark:border-slate-800">
+            <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded-md w-40 mb-2" />
+            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded-md w-72" />
           </div>
 
-          <div className="p-4 border-b border-slate-100">
-            <div className="h-8 bg-slate-200 rounded-md w-full" />
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded-md w-full" />
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-100">
+                <tr className="border-b border-slate-100 dark:border-slate-800">
                   <th className="px-5 py-3">
-                    <div className="h-3 bg-slate-200 rounded w-16" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-16" />
                   </th>
                   <th className="px-5 py-3">
-                    <div className="h-3 bg-slate-200 rounded w-20" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-20" />
                   </th>
                   <th className="px-5 py-3">
-                    <div className="h-3 bg-slate-200 rounded w-28" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-28" />
                   </th>
                   <th className="px-5 py-3">
-                    <div className="h-3 bg-slate-200 rounded w-16 ml-auto" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-16 ml-auto" />
                   </th>
                 </tr>
               </thead>
@@ -894,134 +744,94 @@ const handleCloseEditModal = () => {
     <div className="space-y-6 animate-in fade-in duration-300 motion-reduce:animate-none">
 
       {/* PAGE HEADER */}
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-800">
-          Team Roster
-        </h1>
+      <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-200">
+            Team Roster
+          </h1>
 
-        <p className="text-slate-500 text-sm mt-1 max-w-2xl">
-          Manage your athletes and document compliance.
-        </p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1 max-w-2xl">
+            Manage your athletes and document compliance.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setErrorMessage(null);
+            setIsExportModalOpen(true);
+          }}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-sm transition-colors shrink-0"
+        >
+          <FileText className="w-4 h-4" />
+          Export Athlete Gallery
+        </button>
       </header>
 
-      {/* TEAM PROFILE BANNER */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-[#0f172a] text-white flex items-center justify-center shadow-sm">
-            <Users className="w-7 h-7" />
-          </div>
+      {/* TEAM PROFILE BANNER - Removed Coach info completely */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 flex flex-col justify-center items-start gap-2">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+          {getTeamAcronym(profile?.institution_id)}{' '}
+          {formatSportTeamName(profile?.sport)}
+        </h2>
 
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">
-              {getTeamAcronym(profile?.institution_id)}{' '}
-              {formatSportTeamName(profile?.sport)}
-            </h2>
-
-            <p className="text-slate-500 text-sm mt-1 max-w-2xl">
-              {profile?.team_motto ||
-                'The National Sports Association of Private Schools, Colleges and Universities of the Philippines'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col w-full md:w-auto md:border-l md:border-slate-100 md:pl-8">
-          <p className="text-xs font-medium text-slate-500 mb-2">
-            Coach
-          </p>
-
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-slate-200 rounded-full shrink-0 flex items-center justify-center text-slate-500 text-sm font-bold">
-              {user?.full_name?.charAt(0)?.toUpperCase() || 'C'}
-            </div>
-
-            <div className="flex flex-col">
-              <p className="text-sm font-bold text-slate-800">
-                {user?.full_name}
-              </p>
-
-              <p className="text-[11px] font-medium text-slate-400 mt-0.5">
-                Head Coach
-              </p>
-            </div>
-          </div>
-        </div>
+        <p className="text-slate-500 dark:text-slate-400 text-sm max-w-2xl">
+          {profile?.team_motto ||
+            'The National Sports Association of Private Schools, Colleges and Universities of the Philippines'}
+        </p>
       </div>
 
-      {/* SUMMARY */}
+      {/* SUMMARY - Removed circular icons on the right side of each box */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              Total Athletes
-            </p>
-            <h3 className="text-2xl font-bold text-slate-800 mt-1">
-              {athletes.length}
-            </h3>
-          </div>
-
-          <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
-            <Users className="w-5 h-5" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Total Athletes
+          </p>
+          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">
+            {athletes.length}
+          </h3>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              Verified
-            </p>
-            <h3 className="text-2xl font-bold text-emerald-700 mt-1">
-              {eligibilityCounts.verified}
-            </h3>
-          </div>
-
-          <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Verified
+          </p>
+          <h3 className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+            {eligibilityCounts.verified}
+          </h3>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              Under Review
-            </p>
-            <h3 className="text-2xl font-bold text-blue-700 mt-1">
-              {eligibilityCounts.underReview}
-            </h3>
-          </div>
-
-          <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
-            <Clock className="w-5 h-5" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Under Review
+          </p>
+          <h3 className="text-2xl font-bold text-blue-700 dark:text-blue-400 mt-1">
+            {eligibilityCounts.underReview}
+          </h3>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              Action Required
-            </p>
-            <h3 className="text-2xl font-bold text-amber-700 mt-1">
-              {eligibilityCounts.actionRequired}
-            </h3>
-          </div>
-
-          <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center">
-            <AlertCircle className="w-5 h-5" />
-          </div>
+        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-center">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Action Required
+          </p>
+          <h3 className="text-2xl font-bold text-amber-700 dark:text-amber-400 mt-1">
+            {eligibilityCounts.actionRequired}
+          </h3>
         </div>
       </div>
 
       {/* UPCOMING EVENTS */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
             Upcoming Events
           </p>
-          <h3 className="text-2xl font-bold text-slate-800 mt-1">
+          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">
             {eventCount}
           </h3>
         </div>
 
-        <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center">
+        <div className="w-11 h-11 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="w-5 h-5"
@@ -1041,16 +851,16 @@ const handleCloseEditModal = () => {
       </div>
 
       {/* ATHLETES LIST */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
 
         {/* HEADER */}
-        <div className="px-5 py-4 border-b border-slate-100">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
 
             {/* TITLE + DIVISION FILTER */}
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
                   Athletes List
                 </h2>
 
@@ -1060,9 +870,9 @@ const handleCloseEditModal = () => {
                     onClick={() =>
                       setShowDivisionFilters((v) => !v)
                     }
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                   >
-                    <Filter className="w-3.5 h-3.5 text-slate-400" />
+                    <Filter className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
 
                     {DIVISION_FILTERS.find(
                       (f) => f.key === divisionFilter
@@ -1078,7 +888,7 @@ const handleCloseEditModal = () => {
                         }
                       />
 
-                      <div className="absolute left-0 top-full mt-2 z-20 w-44 bg-white rounded-xl border border-slate-200 shadow-lg p-1.5">
+                      <div className="absolute left-0 top-full mt-2 z-20 w-44 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg p-1.5">
                         {DIVISION_FILTERS.map((f) => {
                           const isActive =
                             divisionFilter === f.key;
@@ -1093,8 +903,8 @@ const handleCloseEditModal = () => {
                               }}
                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${
                                 isActive
-                                  ? 'bg-blue-50 text-blue-700 font-semibold'
-                                  : 'text-slate-600 hover:bg-slate-50'
+                                  ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 font-semibold'
+                                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                               }`}
                             >
                               {f.label}
@@ -1111,7 +921,7 @@ const handleCloseEditModal = () => {
                 </div>
               </div>
 
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                 Manage athletes and track their eligibility documents.
               </p>
             </div>
@@ -1124,7 +934,7 @@ const handleCloseEditModal = () => {
                 onClick={() =>
                   setIsTeamBulkUploadOpen(true)
                 }
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition"
               >
                 <FolderUp className="w-4 h-4" />
                 Upload Team Documents
@@ -1146,8 +956,8 @@ const handleCloseEditModal = () => {
           </div>
         </div>
 
-        {/* FILTER + SEARCH */}
-        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/30">
+        {/* FILTER + SEARCH (Fixed dark mode text visibility) */}
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-transparent">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
 
             {/* ELIGIBILITY FILTERS */}
@@ -1160,8 +970,8 @@ const handleCloseEditModal = () => {
                 }
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                   eligibilityFilter === 'all'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-[#adc6ff] border-blue-200 dark:border-[#adc6ff]/30'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 All
@@ -1177,8 +987,8 @@ const handleCloseEditModal = () => {
                 }
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                   eligibilityFilter === 'ready'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-[#4edea3] border-emerald-200 dark:border-emerald-500/30'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -1197,8 +1007,8 @@ const handleCloseEditModal = () => {
                 }
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                   eligibilityFilter === 'pending_verification'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-[#adc6ff] border-blue-200 dark:border-[#adc6ff]/30'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
@@ -1217,8 +1027,8 @@ const handleCloseEditModal = () => {
                 }
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                   eligibilityFilter === 'missing_documents'
-                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'
+                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -1232,7 +1042,7 @@ const handleCloseEditModal = () => {
             {/* SEARCH + SORT */}
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
 
                 <input
                   type="text"
@@ -1241,12 +1051,12 @@ const handleCloseEditModal = () => {
                     setSearchQuery(e.target.value)
                   }
                   placeholder="Search by name, email, or ID..."
-                  className="w-full sm:w-64 pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  className="w-full sm:w-64 pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
               </div>
 
               <div className="relative">
-                <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500 pointer-events-none" />
 
                 <select
                   value={sortOrder}
@@ -1255,7 +1065,7 @@ const handleCloseEditModal = () => {
                       e.target.value as 'asc' | 'desc'
                     )
                   }
-                  className="appearance-none pl-8 pr-8 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  className="appearance-none pl-8 pr-8 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-600 dark:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 >
                   <option value="asc">
                     Name (A-Z)
@@ -1273,20 +1083,20 @@ const handleCloseEditModal = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-100 dark:border-slate-800">
+                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Athlete
                 </th>
 
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Documents
                 </th>
 
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Eligibility Status
                 </th>
 
-                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">
+                <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 text-right">
                   Actions
                 </th>
               </tr>
@@ -1297,15 +1107,15 @@ const handleCloseEditModal = () => {
                 <tr>
                   <td colSpan={4} className="py-14 px-5 text-center">
                     <div className="mx-auto max-w-sm">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto">
-                        <Users className="w-5 h-5 text-slate-400" />
+                      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto">
+                        <Users className="w-5 h-5 text-slate-400 dark:text-slate-500" />
                       </div>
 
-                      <p className="mt-3 text-sm font-semibold text-slate-700">
+                      <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-300">
                         No athletes yet
                       </p>
 
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                         Add your first athlete to begin managing eligibility documents.
                       </p>
 
@@ -1323,13 +1133,13 @@ const handleCloseEditModal = () => {
               ) : filteredAthletes.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="py-14 px-5 text-center">
-                    <Search className="w-6 h-6 text-slate-300 mx-auto" />
+                    <Search className="w-6 h-6 text-slate-300 dark:text-slate-600 mx-auto" />
 
-                    <p className="mt-2 text-sm font-medium text-slate-600">
+                    <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-400">
                       No athletes found
                     </p>
 
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                       Try changing your filters or search query.
                     </p>
                   </td>
@@ -1353,12 +1163,12 @@ const handleCloseEditModal = () => {
                   return (
                     <tr
                       key={member.id}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors"
+                      className="border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       {/* ATHLETE */}
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">
                             {member.name
                               .charAt(0)
                               .toUpperCase()}
@@ -1366,12 +1176,12 @@ const handleCloseEditModal = () => {
 
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-semibold text-slate-900">
+                              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                 {member.name}
                               </p>
 
                               {member.year_level && (
-                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                                   {member.year_level}
                                 </span>
                               )}
@@ -1382,14 +1192,14 @@ const handleCloseEditModal = () => {
                               ) === 25 && (
                                 <span
                                   title="This athlete will be ineligible next year under the PRISAA age cutoff."
-                                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap"
+                                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 whitespace-nowrap"
                                 >
                                   Final Playing Year
                                 </span>
                               )}
                             </div>
 
-                            <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[320px]">
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[320px]">
                               {member.email}
                             </p>
                           </div>
@@ -1398,52 +1208,24 @@ const handleCloseEditModal = () => {
 
                       {/* DOCUMENTS */}
                       <td className="px-5 py-4">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDocsAthlete({
-                              id: member.id,
-                              name: member.name,
-                            })
-                          }
-                          title="Upload documents"
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium ${
                             complete
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                              : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-amber-700 dark:text-amber-400'
                           }`}
                         >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              complete
-                                ? 'bg-emerald-500'
-                                : 'bg-amber-500'
-                            }`}
-                          />
-
                           {complete
                             ? `${TOTAL_REQUIRED_DOCUMENTS}/${TOTAL_REQUIRED_DOCUMENTS} Complete`
                             : `${uploadedCount}/${TOTAL_REQUIRED_DOCUMENTS} Documents`}
-                        </button>
+                        </span>
                       </td>
 
                       {/* ELIGIBILITY */}
                       <td className="px-5 py-4">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setDocsAthlete({
-                              id: member.id,
-                              name: member.name,
-                            })
-                          }
-                          className="hover:opacity-80 transition"
-                          title="View eligibility details"
-                        >
-                          <EligibilityBadge
-                            status={screening?.eligibility}
-                          />
-                        </button>
+                        <EligibilityBadge
+                          status={screening?.eligibility}
+                        />
                       </td>
 
                       {/* ACTIONS */}
@@ -1455,7 +1237,7 @@ const handleCloseEditModal = () => {
                             onClick={() =>
                               handleOpenEdit(member)
                             }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition"
                             title="Edit athlete"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -1470,7 +1252,7 @@ const handleCloseEditModal = () => {
                                 name: member.name,
                               })
                             }
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-blue-50 hover:text-blue-700 transition"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-400 transition"
                             title="Upload documents"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -1482,10 +1264,10 @@ const handleCloseEditModal = () => {
                             onClick={() =>
                               setAthleteToDelete(member.id)
                             }
-                            className="p-2 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
-                            title="Delete athlete"
+                            className="p-2 rounded-lg text-slate-400 dark:text-slate-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 hover:text-amber-600 dark:hover:text-amber-400 transition"
+                            title="Archive athlete"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Archive className="w-4 h-4" />
                           </button>
 
                         </div>
@@ -1500,10 +1282,10 @@ const handleCloseEditModal = () => {
 
         {/* FOOTER */}
         {filteredAthletes.length > 0 && (
-          <div className="px-5 py-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <p className="text-xs text-slate-500">
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Showing{' '}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
                 {Math.min(
                   (currentPage - 1) * PAGE_SIZE + 1,
                   filteredAthletes.length
@@ -1515,7 +1297,7 @@ const handleCloseEditModal = () => {
                 )}
               </span>{' '}
               of{' '}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
                 {filteredAthletes.length}
               </span>{' '}
               athletes
@@ -1531,7 +1313,7 @@ const handleCloseEditModal = () => {
                       Math.max(1, p - 1)
                     )
                   }
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                   Previous
@@ -1550,7 +1332,7 @@ const handleCloseEditModal = () => {
                     className={`w-8 h-8 rounded-lg text-xs font-semibold transition ${
                       page === currentPage
                         ? 'bg-blue-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-100'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     {page}
@@ -1565,7 +1347,7 @@ const handleCloseEditModal = () => {
                       Math.min(totalPages, p + 1)
                     )
                   }
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent"
                 >
                   Next
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -1576,410 +1358,25 @@ const handleCloseEditModal = () => {
         )}
       </div>
 
-      {/* ADD ATHLETE MODAL */}
-      {shouldRenderAddModal && (
-        <div
-          className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4 motion-reduce:animate-none ${
-            isAddModalClosing
-              ? 'animate-out fade-out duration-150'
-              : 'animate-in fade-in duration-200'
-          }`}
-        >
-          <div
-            className={`bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden motion-reduce:animate-none ${
-              isAddModalClosing
-                ? 'animate-out fade-out zoom-out-95 duration-150'
-                : 'animate-in fade-in zoom-in-95 duration-200'
-            }`}
-          >
-            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100">
-              <div>
-                <h3 className="font-bold text-lg text-slate-900">
-                  Add New Athlete
-                </h3>
+      {/* ADD / EDIT ATHLETE MODAL */}
+      <AddAthleteModal
+        isOpen={isModalOpen || !!athleteToEdit}
+        onClose={() => {
+          setIsModalOpen(false);
+          setAthleteToEdit(null);
+        }}
+        coachId={currentUserId}
+        coachSport={profile?.sport}
+        athleteToEdit={athleteToEdit}
+      />
 
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Add an athlete to your team roster.
-                </p>
-              </div>
 
-              <button
-                type="button"
-                onClick={handleCloseAddModal}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleAddAthlete}
-              className="p-5 space-y-4"
-            >
-              {errorMessage && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">
-                  {errorMessage}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Full Name
-                </label>
-
-                <input
-                  required
-                  type="text"
-                  value={newAthlete.name}
-                  onChange={(e) =>
-                    setNewAthlete({
-                      ...newAthlete,
-                      name: e.target.value,
-                    })
-                  }
-                  maxLength={100}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
-                  placeholder="e.g. John Doe"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Gmail Address
-                </label>
-
-                <input
-                  required
-                  type="email"
-                  value={newAthlete.email}
-                  onChange={(e) =>
-                    setNewAthlete({
-                      ...newAthlete,
-                      email: e.target.value,
-                    })
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
-                  placeholder="johndoe@gmail.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Sport
-                </label>
-                <input
-                  type="text"
-                  value={profile?.sport || newAthlete.sport || ''}
-                  readOnly
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-600 cursor-not-allowed"
-                  placeholder="Set your sport in Settings"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Automatically inherited from your coach profile.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Gender
-                </label>
-                <SexOption
-                  value={newAthlete.gender}
-                  onChange={(value) =>
-                    setNewAthlete({ ...newAthlete, gender: value })
-                  }
-                  options={['Male', 'Female']}
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1">
-                  Division
-                </label>
-
-                <DivisionSelect
-                  value={newAthlete.division}
-                  onChange={(v) =>
-                    setNewAthlete({
-                      ...newAthlete,
-                      division: v,
-                    })
-                  }
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Year Level
-                </label>
-                <select
-                  value={newAthlete.year_level}
-                  onChange={(e) =>
-                    setNewAthlete({
-                      ...newAthlete,
-                      year_level: e.target.value,
-                    })
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
-                >
-                  <option value="">Select Year Level</option>
-                  {YEAR_LEVEL_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Date of Birth
-                </label>
-
-                <input
-                  required
-                  type="date"
-                  value={newAthlete.date_of_birth}
-                  max={
-                    new Date()
-                      .toISOString()
-                      .split('T')[0]
-                  }
-                  onChange={(e) =>
-                    setNewAthlete({
-                      ...newAthlete,
-                      date_of_birth: e.target.value,
-                    })
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
-                />
-
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Used to determine PRISAA age-cutoff eligibility for future events.
-                </p>
-              </div>
-
-              <div className="pt-2 flex gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseAddModal}
-                  className="flex-1 px-4 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium transition"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={addAthleteMutation.isPending}
-                  className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition shadow-sm"
-                >
-                  {addAthleteMutation.isPending
-                    ? 'Saving...'
-                    : 'Save Athlete'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT ATHLETE MODAL */}
-      {athleteToEdit && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100">
-              <div>
-                <h3 className="font-bold text-lg text-slate-900">
-                  Edit Athlete
-                </h3>
-
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Update athlete information.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCloseEditModal}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleUpdateAthlete}
-              className="p-5 space-y-4"
-            >
-              {errorMessage && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-100">
-                  {errorMessage}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Full Name
-                </label>
-
-                <input
-                  required
-                  type="text"
-                  value={editAthlete.name}
-                  onChange={(e) =>
-                    setEditAthlete({
-                      ...editAthlete,
-                      name: e.target.value,
-                    })
-                  }
-                  maxLength={100}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Gmail Address
-                </label>
-
-                <input
-                  required
-                  type="email"
-                  value={editAthlete.email}
-                  onChange={(e) =>
-                    setEditAthlete({
-                      ...editAthlete,
-                      email: e.target.value,
-                    })
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Sport
-                </label>
-                <input
-                  type="text"
-                  value={profile?.sport || editAthlete.sport || ''}
-                  readOnly
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-slate-50 text-slate-600 cursor-not-allowed"
-                  placeholder="Set your sport in Settings"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Automatically inherited from your coach profile.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Gender
-                </label>
-                <SexOption
-                  value={editAthlete.gender}
-                  onChange={(value) =>
-                    setEditAthlete({ ...editAthlete, gender: value })
-                  }
-                  options={['Male', 'Female']}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Division
-                </label>
-
-                <DivisionSelect
-                  value={editAthlete.division}
-                  onChange={(v) =>
-                    setEditAthlete({
-                      ...editAthlete,
-                      division: v,
-                    })
-                  }
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Year Level
-                </label>
-                <select
-                  value={editAthlete.year_level}
-                  onChange={(e) =>
-                    setEditAthlete({
-                      ...editAthlete,
-                      year_level: e.target.value,
-                    })
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white"
-                >
-                  <option value="">Select Year Level</option>
-                  {YEAR_LEVEL_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Date of Birth
-                </label>
-
-                <input
-                  required
-                  type="date"
-                  value={editAthlete.date_of_birth}
-                  max={
-                    new Date()
-                      .toISOString()
-                      .split('T')[0]
-                  }
-                  onChange={(e) =>
-                    setEditAthlete({
-                      ...editAthlete,
-                      date_of_birth: e.target.value,
-                    })
-                  }
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleCloseEditModal}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={updateAthleteMutation.isPending}
-                  className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {updateAthleteMutation.isPending
-                    ? 'Saving...'
-                    : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE CONFIRMATION */}
+      {/* ARCHIVE CONFIRMATION */}
       <ConfirmModal
         isOpen={athleteToDelete !== null}
-        title="Remove Athlete"
-        message="Are you sure you want to remove this athlete from your roster? This action cannot be undone."
-        confirmText="Remove"
+        title="Archive Athlete"
+        message="This athlete will be moved to the Archive tab and removed from your active roster. You can restore them anytime from there."
+        confirmText="Archive"
         onConfirm={confirmDeleteAthlete}
         onCancel={() =>
           setAthleteToDelete(null)
@@ -2012,6 +1409,24 @@ const handleCloseEditModal = () => {
         eligibilityCheckDate={
           upcomingEvents[0]?.event_date ?? null
         }
+      />
+
+      {/* EXPORT FORM 01B */}
+      <AthleteExportSelectModal
+        isOpen={isExportModalOpen}
+        onClose={() => {
+          setIsExportModalOpen(false);
+          setErrorMessage(null);
+        }}
+        athletes={athletes.map((a) => ({
+          id: a.id,
+          name: a.name,
+          year_level: a.year_level ?? null,
+          gender: a.gender ?? null,
+        }))}
+        onConfirm={handleExportConfirm}
+        isExporting={isExporting}
+        errorMessage={errorMessage}
       />
     </div>
   );

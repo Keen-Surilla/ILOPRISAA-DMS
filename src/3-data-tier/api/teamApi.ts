@@ -5,6 +5,9 @@ import { withAuthRetry } from '../../2-application-tier/utils/withAuthRetry';
 export type TeamMember = Database['public']['Tables']['team_members']['Row'];
 export type NewTeamMember = Database['public']['Tables']['team_members']['Insert'];
 
+const TEAM_MEMBER_COLUMNS =
+  'id, name, email, role, coach_id, user_id, created_at, status, date_of_birth, division, year_level, course, year_graduated_shs, sport, gender, prisaa_academic_data';
+
 export class TeamApiError extends Error {
   readonly code: string;
 
@@ -20,9 +23,7 @@ export const teamApi = {
     const { data, error } = await withAuthRetry(() =>
       supabase
         .from('team_members')
-        .select(
-          'id, name, email, role, coach_id, user_id, created_at, status, date_of_birth, division, year_level, sport, gender, prisaa_academic_data'
-        )
+        .select(TEAM_MEMBER_COLUMNS)
         .eq('coach_id', coachId)
         .eq('status', 'active')
     );
@@ -48,9 +49,7 @@ export const teamApi = {
     const { data, error } = await withAuthRetry(() =>
       supabase
         .from('team_members')
-        .select(
-          'id, name, email, role, coach_id, user_id, created_at, status, date_of_birth, division, year_level, sport, gender, prisaa_academic_data'
-        )
+        .select(TEAM_MEMBER_COLUMNS)
         .eq('coach_id', coachId)
         .eq('status', 'archived')
     );
@@ -99,11 +98,7 @@ export const teamApi = {
 
   async getTeamMembersForViewer(): Promise<TeamMember[]> {
     const { data, error } = await withAuthRetry(() =>
-      supabase
-        .from('team_members')
-        .select(
-          'id, name, email, role, coach_id, user_id, created_at, status, date_of_birth, division, year_level, sport, gender, prisaa_academic_data'
-        )
+      supabase.from('team_members').select(TEAM_MEMBER_COLUMNS)
     );
 
     if (error) {
@@ -145,9 +140,7 @@ export const teamApi = {
       supabase
         .from('team_members')
         .insert([{ ...athleteData, name, email }])
-        .select(
-          'id, name, email, role, coach_id, user_id, created_at, status, date_of_birth, division, year_level, sport, gender, prisaa_academic_data'
-        )
+        .select(TEAM_MEMBER_COLUMNS)
         .single()
     );
 
@@ -198,12 +191,49 @@ export const teamApi = {
     }
   },
 
+  async archiveAthlete(id: string, coachId: string): Promise<void> {
+    const { error, count } = await withAuthRetry(() =>
+      supabase
+        .from('team_members')
+        .update({ status: 'archived' }, { count: 'exact' })
+        .eq('id', id)
+        .eq('coach_id', coachId)
+    );
+
+    if (error) {
+      console.error('API Error archiving athlete:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+
+      throw new TeamApiError(
+        error.message ||
+          'Could not archive this athlete. Please try again.',
+        error.code || 'UPDATE_FAILED'
+      );
+    }
+
+    if (!count) {
+      throw new TeamApiError('Athlete not found.', 'NOT_FOUND');
+    }
+  },
+
   async updateAthlete(
     id: string,
     coachId: string,
     data: Pick<
       TeamMember,
-      'name' | 'email' | 'date_of_birth' | 'division' | 'year_level' | 'sport' | 'gender'
+      | 'name'
+      | 'email'
+      | 'date_of_birth'
+      | 'division'
+      | 'year_level'
+      | 'course'
+      | 'year_graduated_shs'
+      | 'sport'
+      | 'gender'
     >
   ): Promise<void> {
     const { error } = await withAuthRetry(() =>

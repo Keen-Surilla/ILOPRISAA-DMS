@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_lockouts: {
+        Row: {
+          email: string
+          expires_at: string | null
+          locked_at: string
+          reason: string
+        }
+        Insert: {
+          email: string
+          expires_at?: string | null
+          locked_at?: string
+          reason?: string
+        }
+        Update: {
+          email?: string
+          expires_at?: string | null
+          locked_at?: string
+          reason?: string
+        }
+        Relationships: []
+      }
+      blocked_ips: {
+        Row: {
+          blocked_at: string
+          expires_at: string | null
+          ip_address: string
+          reason: string
+        }
+        Insert: {
+          blocked_at?: string
+          expires_at?: string | null
+          ip_address: string
+          reason: string
+        }
+        Update: {
+          blocked_at?: string
+          expires_at?: string | null
+          ip_address?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       coach_profiles: {
         Row: {
           avatar_seed: string | null
@@ -267,6 +309,24 @@ export type Database = {
         }
         Relationships: []
       }
+      login_failures: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -333,9 +393,31 @@ export type Database = {
         }
         Relationships: []
       }
+      security_incidents: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          ip_address: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          ip_address: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          ip_address?: string
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
           coach_id: string
+          course: string | null
           created_at: string
           date_of_birth: string | null
           division: string | null
@@ -348,10 +430,12 @@ export type Database = {
           sport: string | null
           status: string
           user_id: string | null
+          year_graduated_shs: string | null
           year_level: string | null
         }
         Insert: {
           coach_id: string
+          course?: string | null
           created_at?: string
           date_of_birth?: string | null
           division?: string | null
@@ -364,10 +448,12 @@ export type Database = {
           sport?: string | null
           status?: string
           user_id?: string | null
+          year_graduated_shs?: string | null
           year_level?: string | null
         }
         Update: {
           coach_id?: string
+          course?: string | null
           created_at?: string
           date_of_birth?: string | null
           division?: string | null
@@ -380,6 +466,7 @@ export type Database = {
           sport?: string | null
           status?: string
           user_id?: string | null
+          year_graduated_shs?: string | null
           year_level?: string | null
         }
         Relationships: []
