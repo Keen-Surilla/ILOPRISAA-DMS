@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import {
-  X,
   FileText,
   Users,
   Filter,
@@ -32,8 +31,6 @@ import {
 } from '../../../3-data-tier/api/screeningApi';
 import { getProfile } from '../../../3-data-tier/services/profileService';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
-import { DivisionSelect } from '../../components/ui/DivisionSelect';
-import { SexOption } from '../../components/ui/SexOption';
 import { AthleteExportSelectModal } from '../../components/ui/AthleteExportSelectModal';
 import { getExportData } from '../../../3-data-tier/api/exportApi';
 // TODO: confirm this path once the tertiary generator's real location is settled
@@ -57,11 +54,7 @@ const ILOPRISAA_SCHOOLS: Record<string, string> = {
   'iloilo integrated school foundation': 'IISF',
 };
 
-const YEAR_LEVEL_OPTIONS = [
-  'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6',
-  'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12',
-  '1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year',
-] as const;
+
 
 export function getSchoolAbbreviation(schoolName?: string | null): string {
   if (!schoolName) return 'ILOPRISAA';
