@@ -21,7 +21,7 @@ export function LearnMoreFooter() {
               </div>
               <p className="max-w-sm text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                 The centralized eligibility and accreditation framework for
-                member educational institutions in Iloilo City and Province.
+                member educational institutions in Iloilo City.
                 Operating under Republic Act 10173.
               </p>
             </div>

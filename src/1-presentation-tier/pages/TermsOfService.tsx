@@ -225,32 +225,36 @@ export default function TermsOfService() {
             </p>
           </SectionBlock>
 
-          <section className="mb-10 space-y-3">
-            <h2 className="text-lg font-bold text-slate-900">15. Contact Information</h2>
-            <p className="pb-2 text-xs font-medium text-slate-500">Official inquiries and governance secretariat</p>
+          <SectionBlock number="15" title="Contact Information" subtitle="Official inquiries and governance secretariat">
             <p className="mb-4 text-base leading-relaxed text-slate-700">
               For inquiries regarding these Terms of Service, institutional onboarding, credential permissions, or tournament screening guidelines, please direct official communications to:
             </p>
-            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-5 text-sm leading-relaxed text-slate-700">
-              <p className="text-base font-bold text-slate-900">Iloilo Private Schools Athletic Association (ILOPRISAA)</p>
-              <p>Board of Trustees &amp; Screening Committee</p>
-              <p>Iloilo City, Iloilo, Western Visayas (Region VI), Philippines</p>
-              <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3">
-                <span>
-                  <strong>Secretariat:</strong>{' '}
-                  <a className="text-blue-700 hover:underline" href="mailto:secretariat@iloprisaa.edu.ph">secretariat@iloprisaa.edu.ph</a>
-                </span>
-                <span>
-                  <strong>Eligibility Inquiries:</strong>{' '}
-                  <a className="text-blue-700 hover:underline" href="mailto:eligibility@iloprisaa.edu.ph">eligibility@iloprisaa.edu.ph</a>
-                </span>
-                <span>
-                  <strong>Technical Desk:</strong>{' '}
-                  <a className="text-blue-700 hover:underline" href="mailto:support@iloprisaa.edu.ph">support@iloprisaa.edu.ph</a>
-                </span>
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
+              <div>
+                <div className="text-base font-bold text-slate-900">Iloilo Private Schools Athletic Association (ILOPRISAA)</div>
+                <div className="text-slate-600">Board of Trustees &amp; Screening Committee</div>
+                <div className="text-slate-600">Iloilo City, Iloilo, Western Visayas (Region VI), Philippines</div>
+              </div>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-2 border-t border-slate-200/75 pt-2 text-xs sm:grid-cols-2">
+                <div>
+                  <span className="font-medium text-slate-500">Secretariat:</span>
+                  <a className="ml-1 text-blue-600 hover:underline" href="mailto:secretariat@iloprisaa.edu.ph">secretariat@iloprisaa.edu.ph</a>
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Eligibility Inquiries:</span>
+                  <a className="ml-1 text-blue-600 hover:underline" href="mailto:eligibility@iloprisaa.edu.ph">eligibility@iloprisaa.edu.ph</a>
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Technical Desk:</span>
+                  <a className="ml-1 text-blue-600 hover:underline" href="mailto:support@iloprisaa.edu.ph">support@iloprisaa.edu.ph</a>
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Compliance Registry:</span>
+                  <span className="ml-1 text-slate-700">Republic Act No. 10173 &middot; NPC</span>
+                </div>
               </div>
             </div>
-          </section>
+          </SectionBlock>
         </div>
       </main>
 

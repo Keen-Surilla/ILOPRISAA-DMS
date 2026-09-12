@@ -1,4 +1,3 @@
-
 import { Link } from 'react-router-dom';
 import Logo2 from '../../assets/Frame 100.svg';
 import { LearnMoreHeader } from '../components/LearnMore/LearnMoreHeader';
@@ -64,12 +63,15 @@ function Brandmark({ className = 'h-5 w-5' }: { className?: string }) {
 }
 
 function SectionBlock({ number, title, subtitle, children }: {
-  number: number; title: string; subtitle?: string; children: React.ReactNode;
+  number: string; title: string; subtitle?: string; children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4 border-t border-slate-200 pt-4">
-      <h2 className="text-lg font-bold text-slate-900">{number}. {title}</h2>
-      {subtitle && <p className="pb-1 text-xs font-medium text-slate-500">{subtitle}</p>}
+    // CHANGED: Added mb-10 and increased pt-4 to pt-8 for proper legal document spacing
+    <section className="mb-10 space-y-4 border-t border-slate-200 pt-8">
+      <div>
+        <h2 className="text-lg font-bold text-slate-900">{number}. {title}</h2>
+        {subtitle && <p className="pt-1 text-xs font-medium text-slate-500">{subtitle}</p>}
+      </div>
       {children}
     </section>
   );
@@ -90,13 +92,15 @@ function BulletList({ items }: { items: readonly (readonly [string, string])[] }
 export default function UsagePolicy() {
   return (
     <div className="flex min-h-screen flex-col justify-between bg-[#F8FAFC] text-slate-800">
-      {/* 1. NEW REUSABLE HEADER INJECTED HERE */}
+      
+      {/* 1. REUSABLE HEADER */}
       <LearnMoreHeader />
 
       {/* MAIN DOCUMENT */}
       <main className="w-full flex-grow px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[760px] px-1 sm:px-2">
-          <header className="mb-8">
+          
+          <header className="mb-10">
             <div className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-blue-700">
               Platform Governance &amp; Compliance
             </div>
@@ -108,53 +112,53 @@ export default function UsagePolicy() {
             </div>
           </header>
 
-          <div className="border-b border-slate-200 pb-8 text-sm leading-relaxed text-slate-700 sm:text-base">
+          <div className="pb-10 text-base leading-relaxed text-slate-700">
             <p>
               This Usage Policy establishes acceptable use standards, security obligations, and procedural rules for authorized personnel interacting with the Iloilo Private Schools Athletic Association (ILOPRISAA) digital document management and athlete accreditation platform (&ldquo;the Platform&rdquo;). By accessing the Platform, member academic institutions, coaches, screening officers, and institutional administrators agree to adhere strictly to these standards.
             </p>
           </div>
 
-          <SectionBlock number={1} title="Purpose and Scope" subtitle="Institutional mandate and application across member delegations">
+          <SectionBlock number="01" title="Purpose and Scope" subtitle="Institutional mandate and application across member delegations">
             <p className="text-base leading-relaxed text-slate-700">
               The purpose of this Usage Policy is to maintain the operational fidelity, evidentiary integrity, and legal confidentiality of all student-athlete dossiers and tournament clearance workflows across Iloilo City and Province. This policy applies uniformly to all authorized coaches, school athletic directors, campus registrars, screening officers, eligibility committee evaluators, and system administrators. Access to the Platform is a custodial privilege granted solely to facilitate tournament governance under applicable ILOPRISAA bylaws and statutory data protection regulations.
             </p>
           </SectionBlock>
 
-          <SectionBlock number={2} title="Universal Usage Standards" subtitle="Core operating tenets for accredited institutional representatives">
+          <SectionBlock number="02" title="Universal Usage Standards" subtitle="Core operating tenets for accredited institutional representatives">
             <p className="text-base leading-relaxed text-slate-700">
               All accredited users accessing the Platform must strictly adhere to the following professional and operational standards:
             </p>
             <BulletList items={usageStandards} />
           </SectionBlock>
 
-          <SectionBlock number={3} title="Prohibited Activities" subtitle="Violations of institutional trust, platform security, and data protection">
+          <SectionBlock number="03" title="Prohibited Activities" subtitle="Violations of institutional trust, platform security, and data protection">
             <p className="text-base leading-relaxed text-slate-700">
               Authorized users are expressly forbidden from engaging in the following actions on or through the Platform:
             </p>
             <BulletList items={prohibitedActivities} />
           </SectionBlock>
 
-          <SectionBlock number={4} title="Athlete and Institutional Information" subtitle="Custodial handling of sensitive educational and medical records">
+          <SectionBlock number="04" title="Athlete and Institutional Information" subtitle="Custodial handling of sensitive educational and medical records">
             <p className="text-base leading-relaxed text-slate-700">
               Student-athletes do not maintain self-registered accounts on the Platform. Coaches act as custodial stewards, receiving original hard copies directly from athletes and digitizing them on behalf of the member institution. All personal data, including biological sex, birth date, civil registry certifications, academic units, electrocardiogram (ECG) readouts, and parental consents, constitute sensitive institutional information. Users may access and process these records solely within the narrow scope of qualifying athletes for active PRISAA competitions.
             </p>
           </SectionBlock>
 
-          <SectionBlock number={5} title="Document Integrity" subtitle="Standards for authenticity, completeness, and legibility">
+          <SectionBlock number="05" title="Document Integrity" subtitle="Standards for authenticity, completeness, and legibility">
             <p className="text-base leading-relaxed text-slate-700">
               Member institutions bear primary responsibility for the validity and clarity of all digital uploads queued for screening:
             </p>
             <BulletList items={documentIntegrity} />
           </SectionBlock>
 
-          <SectionBlock number={6} title="Human Review and Institutional Authority" subtitle="Non-automated verification and committee discretion">
+          <SectionBlock number="06" title="Human Review and Institutional Authority" subtitle="Non-automated verification and committee discretion">
             <p className="text-base leading-relaxed text-slate-700">
               The ILOPRISAA Platform operates as an administrative digitization and workflow queue system; it does not deploy automated algorithms, AI classification, or automated clearance bots to evaluate or approve student-athletes.
             </p>
             <BulletList items={humanReviewPoints} />
           </SectionBlock>
 
-          <SectionBlock number={7} title="Account Security" subtitle="Credential protection and immediate reporting obligations">
+          <SectionBlock number="07" title="Account Security" subtitle="Credential protection and immediate reporting obligations">
             <p className="text-base leading-relaxed text-slate-700">
               Every authorized account is individualized and tied to an authenticated institutional representative:
             </p>
@@ -163,7 +167,7 @@ export default function UsagePolicy() {
             </ul>
           </SectionBlock>
 
-          <SectionBlock number={8} title="Reporting Misuse" subtitle="Institutional reporting channels for security and eligibility infractions">
+          <SectionBlock number="08" title="Reporting Misuse" subtitle="Institutional reporting channels for security and eligibility infractions">
             <p className="text-base leading-relaxed text-slate-700">
               Users have a mandatory institutional duty to report suspected policy violations, including:
             </p>
@@ -179,26 +183,24 @@ export default function UsagePolicy() {
             </p>
           </SectionBlock>
 
-          <SectionBlock number={9} title="Enforcement and Sanctions" subtitle="Administrative review and progressive disciplinary measures">
+          <SectionBlock number="09" title="Enforcement and Sanctions" subtitle="Administrative review and progressive disciplinary measures">
             <p className="text-base leading-relaxed text-slate-700">
               Violations of this Usage Policy compromise the fairness of inter-school athletics and the security of member records. Infractions will be promptly referred to the ILOPRISAA Board of Trustees and Screening Committee for investigation. Depending on severity, enforcement actions include:
             </p>
             <BulletList items={enforcementActions} />
           </SectionBlock>
 
-          <SectionBlock number={10} title="Policy Updates and Amendments" subtitle="Revision protocols and seasonal notifications">
+          <SectionBlock number="10" title="Policy Updates and Amendments" subtitle="Revision protocols and seasonal notifications">
             <p className="text-base leading-relaxed text-slate-700">
               ILOPRISAA reserves the right to amend or update this Usage Policy periodically to reflect changes in athletic association bylaws, Regional and National PRISAA directives, or Philippine statutory regulations. Revised policies will be published on the Platform with an updated &ldquo;Last Updated&rdquo; timestamp, and written circulars will be transmitted to member school athletic directors prior to each athletic season. Continued access to the Platform following updates constitutes acknowledgment and binding acceptance of the revised terms.
             </p>
           </SectionBlock>
 
-          <section className="mb-10 space-y-3">
-            <h2 className="text-lg font-bold text-slate-900">11. Contact Information</h2>
-            <p className="pb-2 text-xs font-medium text-slate-500">Official governance desks and administrative inquiries</p>
+          <SectionBlock number="11" title="Contact Information" subtitle="Official governance desks and administrative inquiries">
             <p className="mb-4 text-base leading-relaxed text-slate-700">
               For questions regarding acceptable use, institutional compliance, or reporting potential infractions, please contact:
             </p>
-            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
               <div>
                 <div className="text-base font-bold text-slate-900">Iloilo Private Schools Athletic Association (ILOPRISAA)</div>
                 <div className="text-slate-600">Board of Trustees &amp; Screening Committee</div>
@@ -223,7 +225,7 @@ export default function UsagePolicy() {
                 </div>
               </div>
             </div>
-          </section>
+          </SectionBlock>
         </div>
       </main>
 

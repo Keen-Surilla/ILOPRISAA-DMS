@@ -125,7 +125,7 @@ export default function PrivacyPolicy() {
             <p className="text-base leading-relaxed text-slate-700">
               Student-athlete source documents originate with the athlete and are submitted through the athlete&rsquo;s school. The institutional workflow follows this path: the student-athlete provides source documents to their coach, the coach or school administrator submits digitized copies through the Platform, and the Eligibility Committee reviews the submission.
             </p>
-            <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-slate-700">
+            <div className="rounded-md border border-slate-200 bg-slate-100 px-4 py-3 text-sm leading-relaxed text-slate-700">
               Student-athlete source documents are submitted through the authorized school or institutional workflow before digital review.
             </div>
           </SectionBlock>
@@ -183,18 +183,37 @@ export default function PrivacyPolicy() {
             </p>
           </SectionBlock>
 
-          <section className="mb-10 space-y-3">
-            <h2 className="text-lg font-bold text-slate-900">13. Institutional Contact &amp; Inquiries</h2>
-            <p className="pb-2 text-xs font-medium text-slate-500">Designated communication channels for privacy inquiries</p>
+          <SectionBlock number="13" title="Contact Information" subtitle="Designated communication channels for privacy inquiries">
             <p className="mb-4 text-base leading-relaxed text-slate-700">
               For inquiries regarding this Privacy Policy or the processing of athletic accreditation records, please contact the ILOPRISAA Secretariat through official institutional channels.
             </p>
-            <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
-              <div className="text-base font-bold text-slate-900">Iloilo Private Schools Athletic Association (ILOPRISAA)</div>
-              <div className="text-slate-600">Committee on Eligibility and Accreditation &mdash; Data Protection / Privacy Inquiries</div>
-              <div className="text-slate-600">Iloilo City, Iloilo, Western Visayas (Region VI), Philippines</div>
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700 shadow-sm">
+              <div>
+                <div className="text-base font-bold text-slate-900">Iloilo Private Schools Athletic Association (ILOPRISAA)</div>
+                <div className="text-slate-600">Committee on Eligibility and Accreditation &mdash; Data Protection / Privacy Inquiries</div>
+                <div className="text-slate-600">Iloilo City, Iloilo, Western Visayas (Region VI), Philippines</div>
+              </div>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-2 border-t border-slate-200/75 pt-4 text-xs sm:grid-cols-2">
+                <div>
+                  <span className="font-medium text-slate-500">Secretariat:</span>
+                  <a className="ml-1 text-blue-600 hover:underline" href="mailto:secretariat@iloprisaa.edu.ph">secretariat@iloprisaa.edu.ph</a>
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Eligibility Inquiries:</span>
+                  <a className="ml-1 text-blue-600 hover:underline" href="mailto:eligibility@iloprisaa.edu.ph">eligibility@iloprisaa.edu.ph</a>
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Technical Desk:</span>
+                  <a className="ml-1 text-blue-600 hover:underline" href="mailto:support@iloprisaa.edu.ph">support@iloprisaa.edu.ph</a>
+                </div>
+                <div>
+                  <span className="font-medium text-slate-500">Compliance Registry:</span>
+                  <span className="ml-1 text-slate-700">Republic Act No. 10173 &middot; NPC</span>
+                </div>
+              </div>
             </div>
-          </section>
+          </SectionBlock>
+
         </div>
       </main>
 
