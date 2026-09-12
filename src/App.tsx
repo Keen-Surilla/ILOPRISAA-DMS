@@ -7,7 +7,6 @@ import { supabase } from './3-data-tier/config/SupabaseClient';
 import { ForgotPasswordPage } from './1-presentation-tier/components/landing/ForgotPasswordPage';
 
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
-const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
 const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
@@ -53,7 +52,6 @@ export default function App() {
         <Suspense>
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />

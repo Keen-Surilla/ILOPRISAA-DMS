@@ -2,6 +2,7 @@
 import { UserPlus, Plus, Building2, Users, ShieldCheck } from 'lucide-react';
 import { type SectionId } from './constants';
 import { SectionIntro, StatCard, cx } from './sharedUi';
+import { ResourceManagement } from './ResourceManagement';
 
 export function OverviewSection({ onNavigate }: { onNavigate: (s: SectionId) => void }) {
   const totalDocs = 1248;
@@ -77,6 +78,9 @@ export function OverviewSection({ onNavigate }: { onNavigate: (s: SectionId) => 
         </div>
 
       </div>
+
+      {/* Resources & Templates — upload/manage guidelines & forms for coaches */}
+      <ResourceManagement />
     </div>
   );
 }

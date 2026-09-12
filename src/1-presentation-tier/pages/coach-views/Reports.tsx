@@ -171,55 +171,63 @@ const DOC_STATUS_META: Record<DocStatus, { icon: React.ElementType | null; class
   missing: { icon: null, className: "text-slate-500 dark:text-[#64748b]", label: "Not yet uploaded" },
 };
 
-// "unassessed" isn't a real EligibilityStatus stored in the data — it's a
-// display-only state for athletes who haven't submitted anything at all yet
-// (no documents, no transcript units). Without this, every untouched athlete
-// defaulted to "pending" the moment they were added, which reads as "under
-// active review" when nothing has actually been reviewed.
-type DisplayEligibility = EligibilityStatus | "unassessed";
+// DisplayEligibility is a UI-only projection of the raw `eligibility` field.
+// The backend only ever stores "eligible" | "pending" | "ineligible" — but a
+// single "pending" bucket hides an important distinction for coaches:
+//   - documents are all in (nothing missing/rejected), just awaiting the
+//     committee's sign-off  -> "underReview" (blue)
+//   - something on the athlete's side needs attention (missing or rejected
+//     document) before review can even start -> "actionRequired" (amber)
+// This is purely derived for display; it never gets written back to the
+// database, so it can't drift from the source of truth in `eligibility`.
+type DisplayEligibility = "eligible" | "underReview" | "actionRequired" | "ineligible";
 
 const ELIGIBILITY_META: Record<DisplayEligibility, { textClassName: string; numberClassName: string; label: string }> = {
   eligible: {
     textClassName: "text-[#10b981]",
-    numberClassName: "text-blue-600 dark:text-[#adc6ff]",
+    numberClassName: "text-[#10b981]",
     label: "Eligible to play",
   },
-  pending: {
+  underReview: {
+    textClassName: "text-[#3b82f6]",
+    numberClassName: "text-[#3b82f6]",
+    label: "Under review",
+  },
+  actionRequired: {
     textClassName: "text-[#f59e0b]",
     numberClassName: "text-[#f59e0b]",
-    label: "Pending",
+    label: "Action required",
   },
   ineligible: {
     textClassName: "text-[#f43f5e]",
     numberClassName: "text-[#f43f5e]",
     label: "Ineligible",
   },
-  unassessed: {
-    textClassName: "text-slate-400 dark:text-[#64748b]",
-    numberClassName: "text-blue-600 dark:text-[#adc6ff]",
-    label: "—",
-  },
 };
 
 /**
- * An athlete reads as "unassessed" (shows "—") only when NOTHING has been
- * submitted yet — all three documents missing AND no transcript units on
- * file for either semester. The moment any of that shows up, the real
- * eligibility value (defaulting to "pending") takes over.
+ * Projects the raw eligibility + document statuses into one of the four
+ * display buckets above.
+ *
+ * - "eligible" / "ineligible" pass straight through from the backend value —
+ *   those are committee decisions and this function never overrides them.
+ * - Anything else ("pending", or unset) is split by document completeness:
+ *   a missing or rejected document means the ball is in the athlete/coach's
+ *   court ("actionRequired"); a full set of uploaded-but-not-yet-verified
+ *   documents means the ball is in the committee's court ("underReview").
  */
 function getDisplayEligibility(athlete: AthleteRecord): DisplayEligibility {
-  const docsEmpty =
-    (athlete.documents?.psa?.status ?? "missing") === "missing" &&
-    (athlete.documents?.medical?.status ?? "missing") === "missing" &&
-    (athlete.documents?.waiver?.status ?? "missing") === "missing";
+  if (athlete.eligibility === "eligible") return "eligible";
+  if (athlete.eligibility === "ineligible") return "ineligible";
 
-  const torEmpty =
-    !athlete.firstSemester?.passedUnits &&
-    !athlete.firstSemester?.enrolledUnits &&
-    !athlete.secondSemester?.enrolledUnits;
+  const docs = [
+    athlete.documents?.psa?.status ?? "missing",
+    athlete.documents?.medical?.status ?? "missing",
+    athlete.documents?.waiver?.status ?? "missing",
+  ];
 
-  if (docsEmpty && torEmpty) return "unassessed";
-  return athlete.eligibility || "pending";
+  const needsAction = docs.some((status) => status === "missing" || status === "rejected");
+  return needsAction ? "actionRequired" : "underReview";
 }
 
 function DocStatusIcon({ check }: { check: DocumentCheck }) {
@@ -276,7 +284,7 @@ function unitLoadPercent(sem: SemesterLoad): number {
 // 4. FILTER BAR
 // ============================================================================
 
-type FilterKey = "all" | EligibilityStatus;
+type FilterKey = "all" | DisplayEligibility;
 
 function FilterBar({
   counts,
@@ -293,8 +301,9 @@ function FilterBar({
 }) {
   const filters: { key: FilterKey; label: string; dotClassName?: string }[] = [
     { key: "all", label: "All athletes" },
-    { key: "eligible", label: "Cleared", dotClassName: "bg-[#10b981]" },
-    { key: "pending", label: "Pending", dotClassName: "bg-[#f59e0b]" },
+    { key: "eligible", label: "Eligible", dotClassName: "bg-[#10b981]" },
+    { key: "underReview", label: "Under Review", dotClassName: "bg-[#3b82f6]" },
+    { key: "actionRequired", label: "Action Required", dotClassName: "bg-[#f59e0b]" },
     { key: "ineligible", label: "Ineligible", dotClassName: "bg-[#f43f5e]" },
   ];
 
@@ -319,7 +328,7 @@ function FilterBar({
               {filter.dotClassName && (
                 <span className={cn("size-2 rounded-full", filter.dotClassName)} />
               )}
-              {filter.label} ({counts[filter.key]})
+              {filter.label} {counts[filter.key]}
             </button>
           );
         })}
@@ -344,9 +353,9 @@ function FilterBar({
 
 const ROW_TINT: Record<DisplayEligibility, string> = {
   eligible: "bg-white dark:bg-transparent hover:bg-slate-50 dark:hover:bg-white/[0.02]",
-  pending: "bg-amber-50/60 dark:bg-[#f59e0b]/[0.05] hover:bg-amber-50 dark:hover:bg-[#f59e0b]/[0.08]",
+  underReview: "bg-blue-50/60 dark:bg-[#3b82f6]/[0.05] hover:bg-blue-50 dark:hover:bg-[#3b82f6]/[0.08]",
+  actionRequired: "bg-amber-50/60 dark:bg-[#f59e0b]/[0.05] hover:bg-amber-50 dark:hover:bg-[#f59e0b]/[0.08]",
   ineligible: "bg-rose-50/60 dark:bg-[#f43f5e]/[0.05] hover:bg-rose-50 dark:hover:bg-[#f43f5e]/[0.08]",
-  unassessed: "bg-white dark:bg-transparent hover:bg-slate-50 dark:hover:bg-white/[0.02]",
 };
 
 function RosterRow({ athlete, index, level }: { athlete: AthleteRecord; index: number; level: EducationLevel }) {
@@ -488,7 +497,7 @@ function RosterTable({ athletes, loading, level }: { athletes: AthleteRecord[]; 
                   Transcript of records
                 </TableHead>
               ) : (
-                <TableHead colSpan={3} className="border-b border-r border-slate-200 dark:border-white/[0.06] bg-slate-100 dark:bg-white/[0.03] py-2 text-center font-bold tracking-widest text-emerald-600 dark:text-[#4edea3]">
+                <TableHead colSpan={3} className="border-b border-r border-slate-200 dark:border-white/[0.06] bg-slate-100 dark:bg-white/[0.03] py-2 text-center font-bold tracking-widest text-blue-600 dark:text-[#adc6ff]">
                   Certificate of Enrollment
                 </TableHead>
               )}
@@ -938,20 +947,28 @@ export default function ReportsPage({
     });
   }, [allAthletes, level]);
 
-  const counts = React.useMemo<Record<FilterKey, number>>(
-    () => ({
+  // Counts are derived from getDisplayEligibility(), NOT the raw `eligibility`
+  // field, so they stay in lockstep with what the chips/pills actually show.
+  // If this instead re-implemented the "missing/rejected doc" check inline,
+  // it would be trivial for the two to silently drift apart after an edit.
+  const counts = React.useMemo<Record<FilterKey, number>>(() => {
+    const base: Record<FilterKey, number> = {
       all: levelAthletes.length,
-      eligible: levelAthletes.filter((a: any) => a.eligibility === "eligible").length,
-      pending: levelAthletes.filter((a: any) => a.eligibility === "pending").length,
-      ineligible: levelAthletes.filter((a: any) => a.eligibility === "ineligible").length,
-    }),
-    [levelAthletes],
-  );
+      eligible: 0,
+      underReview: 0,
+      actionRequired: 0,
+      ineligible: 0,
+    };
+    levelAthletes.forEach((athlete: AthleteRecord) => {
+      base[getDisplayEligibility(athlete)] += 1;
+    });
+    return base;
+  }, [levelAthletes]);
 
   const visibleAthletes = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return levelAthletes.filter((athlete: any) => {
-      const matchesFilter = filter === "all" || athlete.eligibility === filter;
+    return levelAthletes.filter((athlete: AthleteRecord) => {
+      const matchesFilter = filter === "all" || getDisplayEligibility(athlete) === filter;
       const matchesQuery = q.length === 0 || (athlete.name && athlete.name.toLowerCase().includes(q));
       return matchesFilter && matchesQuery;
     });

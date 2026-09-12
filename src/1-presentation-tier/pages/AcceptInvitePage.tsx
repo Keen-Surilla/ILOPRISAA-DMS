@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Lock, ShieldCheck, UserPlus } from 'lucide-react';
 import { supabase } from '../../3-data-tier/config/SupabaseClient';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 
-import Logo1 from '../../assets/Logo1.svg';
 import Logo2 from '../../assets/Logo2.svg';
 
 type InviteInfo = {
@@ -167,25 +166,34 @@ const handleSubmit = async (e: FormEvent) => {
       setIsSubmitting(false);
     }
   };
-  
+
   if (pageState === 'loading') {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-sm text-slate-400">Checking your invite…</p>
+      <div className="min-h-screen bg-white dark:bg-[#0a1120] flex flex-col font-sans">
+        <header className="w-full px-8 py-4 flex items-center border-b border-slate-100 dark:border-slate-800">
+          <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
+        </header>
+        <main className="flex-1 flex items-center justify-center p-6 bg-slate-50/30 dark:bg-transparent">
+          <p className="font-mono text-xs text-slate-400 dark:text-slate-500">Checking your invite…</p>
+        </main>
       </div>
     );
   }
 
   if (pageState === 'invalid') {
     return (
-      <div className="min-h-screen bg-white flex flex-col font-sans">
-        <header className="w-full px-8 py-4 flex items-center border-b border-slate-100">
+      <div className="min-h-screen bg-white dark:bg-[#0a1120] flex flex-col font-sans">
+        <header className="w-full px-8 py-4 flex items-center border-b border-slate-100 dark:border-slate-800">
           <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
         </header>
-        <main className="flex-1 flex items-center justify-center p-6 bg-slate-50/30">
-          <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-blue-900/5 border border-slate-100 text-center">
-            <h2 className="text-lg font-bold text-slate-800 mb-2">Invite Not Available</h2>
-            <p className="text-sm text-slate-500">{error}</p>
+        <main className="flex-1 flex items-center justify-center p-6 bg-slate-50/30 dark:bg-transparent">
+          <div className="w-full max-w-md">
+            <div className="rounded-2xl border border-blue-100 bg-white/90 p-8 shadow-xl backdrop-blur-xl dark:border-blue-500/30 dark:bg-[#0f172a] dark:shadow-2xl text-center">
+              <h2 className="font-sora text-lg font-extrabold tracking-tight text-slate-900 dark:text-white mb-2">
+                Invite Not Available
+              </h2>
+              <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{error}</p>
+            </div>
           </div>
         </main>
       </div>
@@ -195,83 +203,101 @@ const handleSubmit = async (e: FormEvent) => {
   const roleLabel = invite ? (ROLE_LABELS[invite.role] ?? invite.role) : '';
 
   return (
-    <div className="min-h-screen bg-white flex flex-col font-sans">
-      <header className="w-full px-8 py-4 flex items-center border-b border-slate-100">
+    <div className="min-h-screen bg-white dark:bg-[#0a1120] flex flex-col font-sans">
+      <header className="w-full px-8 py-4 flex items-center border-b border-slate-100 dark:border-slate-800">
         <img src={Logo2} alt="ILOPRISAA" className="h-7 w-auto" />
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-6 bg-slate-50/30">
-        <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-blue-900/5 border border-slate-100 transition-all">
-
-          <div className="flex items-start gap-3 mb-6">
-            <div className="w-16 h-16 flex items-center justify-center shrink-0">
-              <img src={Logo1} alt="Welcome Badge" className="w-full h-full object-contain" />
+      <main className="flex-1 flex items-center justify-center p-6 bg-slate-50/30 dark:bg-transparent">
+        <div className="w-full max-w-md">
+          <div className="mb-6 flex flex-col items-center text-center">
+            <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3.5 py-1 font-mono text-xs font-semibold uppercase tracking-wider text-blue-600 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-400">
+              <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+              Account activation
             </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight mt-1">
-                Join as {roleLabel}
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Set a password to activate your {invite?.email} account
-              </p>
-            </div>
+            <h1 className="font-sora text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+              Join as {roleLabel}
+            </h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+              Set a password to activate your <strong>{invite?.email}</strong> account.
+            </p>
           </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-medium">
-              {error}
-            </div>
-          )}
+          <div className="rounded-2xl border border-blue-100 bg-white/90 p-6 shadow-xl backdrop-blur-xl dark:border-blue-500/30 dark:bg-[#0f172a] dark:shadow-2xl sm:p-8">
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-xs font-medium dark:bg-red-500/10 dark:text-red-400">
+                {error}
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
-                Password
-              </label>
-              <div className="relative">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="password" className="mb-2 block font-mono text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Password
+                </label>
+                <div className="relative flex items-center">
+                  <Lock className={`pointer-events-none absolute left-3.5 h-4 w-4 ${error ? 'text-red-400' : 'text-slate-400'}`} aria-hidden="true" />
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    maxLength={50}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Create a password"
+                    className={`w-full rounded-xl border py-3 pl-10 pr-10 text-sm text-slate-900 placeholder-slate-400 transition-all focus:outline-none focus:ring-1 dark:bg-[#131f37] dark:text-slate-200 dark:placeholder-slate-500 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${
+                      error
+                        ? 'border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-500 dark:border-red-500/60'
+                        : 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700/80'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((s) => !s)}
+                    className="absolute right-3.5 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="confirmPassword" className="mb-2 block font-mono text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Confirm Password
+                </label>
                 <input
+                  id="confirmPassword"
                   type={showPassword ? 'text' : 'password'}
                   required
                   maxLength={50}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-4 pr-10 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
-                  placeholder="Create a password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className={`w-full rounded-xl border px-4 py-3 text-sm text-slate-900 placeholder-slate-400 transition-all focus:outline-none focus:ring-1 dark:bg-[#131f37] dark:text-slate-200 dark:placeholder-slate-500 ${
+                    error
+                      ? 'border-red-400 bg-red-50/40 focus:border-red-500 focus:ring-red-500 dark:border-red-500/60'
+                      : 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-500 dark:border-slate-700/80'
+                  }`}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                </button>
               </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.4)] transition-all hover:bg-blue-500 hover:shadow-[0_0_32px_rgba(59,130,246,0.65)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isSubmitting ? 'Setting up your account…' : 'Activate Account'}
+              </button>
+            </form>
+
+            <div className="mt-6 flex items-center justify-center gap-2 border-t border-slate-100 pt-5 font-mono text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <ShieldCheck className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+              TLS 256-bit encrypted
+              <span className="mx-1 text-slate-300 dark:text-slate-700">|</span>
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
+              Postgres RLS active
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 ml-1">
-                Confirm Password
-              </label>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                maxLength={50}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all text-sm text-slate-800 placeholder-slate-400"
-                placeholder="Re-enter your password"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl mt-2 disabled:opacity-70 disabled:cursor-not-allowed transition-all shadow-md shadow-blue-600/10 active:scale-[0.99]"
-            >
-              {isSubmitting ? 'Setting up your account…' : 'Activate Account'}
-            </button>
-          </form>
-
+          </div>
         </div>
       </main>
     </div>

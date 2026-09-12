@@ -1,10 +1,6 @@
 // src/1-presentation-tier/pages/CoachDashboard.tsx
 import React, { useMemo, useState, useEffect, Suspense, lazy } from 'react';
-import {
-  Calendar, Users, LayoutDashboard, Settings, Clock, ClipboardCheck, Bell,
-  CheckCircle2, UserCircle, FileText, Archive,
-  ShieldCheck, AlertTriangle, Search, ChevronRight, ChevronLeft, XCircle, UploadCloud, Send
-} from 'lucide-react';
+import { Calendar, Users, LayoutDashboard,  Clock, ClipboardCheck, Bell, CheckCircle2, FileText, Archive, ShieldCheck, AlertTriangle, Search, ChevronRight, ChevronLeft, XCircle, UploadCloud, Send } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { getProfile } from '../../3-data-tier/services/profileService';
@@ -22,13 +18,16 @@ const SettingsView = lazy(() => import('./coach-views/SettingsView'));
 const ArchivedTeamView = lazy(() => import('./coach-views/ArchivedTeamView'));
 const ResourceTabs = lazy(() => import('./coach-views/ResourceTabs'));
 const CoachProfileForm = lazy(() => import('./coach-views/CoachProfileForm'));
-const ScreeningSubmissions = lazy(() => import('./coach-views/ScreeningSubmissions'));
 
 const fontImport = "@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');";
 
 // Same DiceBear avatar builder used in Settings, so the header always matches what's saved there.
-const buildAvatarUrl = (seed: string) =>
-  `https://api.dicebear.com/9.x/shapes/svg?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&backgroundColor=0f766e,0891b2,0e7490`;
+const buildAvatarUrl = (seed: string) => {
+  // Pulls the URL from .env, with a fallback just in case it fails to load
+  const baseUrl = import.meta.env.VITE_DICEBEAR_API_URL || 'https://api.dicebear.com/9.x/shapes/svg';
+  
+  return `${baseUrl}?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&backgroundColor=0f766e,0891b2,0e7490`;
+};
 
 function SkeletonBlock({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg bg-white/[0.06] ${className}`} />;
@@ -135,7 +134,7 @@ function FilterTabs({
               : 'bg-slate-50 dark:bg-[#151b2d] text-slate-500 dark:text-[#94a3b8] hover:text-slate-900 dark:hover:text-[#f8fafc] hover:bg-slate-50 dark:hover:bg-[#191f31]'
           }`}
         >
-          {opt.label} ({opt.count})
+          {opt.label} {opt.count}
         </button>
       ))}
     </div>
@@ -979,7 +978,6 @@ export default function CoachDashboard() {
   });
 
   const avatarSeed = (coachProfile as any)?.avatar_seed || user?.id || 'coach';
-  const profileName = user?.full_name || user?.email || 'Coach Profile';
   const rawSport = (coachProfile as any)?.sport;
   const profileSport = rawSport 
     ? rawSport.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) 
@@ -1006,9 +1004,6 @@ export default function CoachDashboard() {
         break;
       case 'coach-profile':
         TabContent = <CoachProfileForm />;
-        break;
-      case 'screening':
-        TabContent = <ScreeningSubmissions />;
         break;
       case 'reports':
         TabContent = <ReportsPage/>;
@@ -1046,7 +1041,6 @@ export default function CoachDashboard() {
             label: 'Eligibility',
             items: [
               { id: 'resources', label: 'Resources', icon: <FileText className="w-5 h-5" />, active: activeTab === 'resources', onClick: () => setActiveTab('resources') },
-              { id: 'screening', label: 'Screening', icon: <ClipboardCheck className="w-5 h-5" />, active: activeTab === 'screening', onClick: () => setActiveTab('screening') },
               { id: 'reports', label: 'Reports', icon: <FileText className="w-5 h-5" />, active: activeTab === 'reports', onClick: () => setActiveTab('reports') },
               { id: 'archives', label: 'Archives', icon: <Archive className="w-5 h-5" />, active: activeTab === 'archives', onClick: () => setActiveTab('archives') },
             ],

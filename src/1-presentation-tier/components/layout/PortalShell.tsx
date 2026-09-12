@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import type { UserRole } from '../../../3-data-tier/types/database.types.extras';
-import Logo2 from "../../../assets/Frame 100.svg";
+import Logo2 from "../../../assets/Logo_DarkMode.svg";
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
 import { PanelLeft, LogOut, Settings, Info, ChevronRight, ChevronDown } from 'lucide-react';
 

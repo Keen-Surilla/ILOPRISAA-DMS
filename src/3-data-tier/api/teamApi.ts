@@ -162,13 +162,28 @@ export const teamApi = {
     return data;
   },
 
-  async deleteAthlete(id: string, coachId: string): Promise<void> {
-    const { error, count } = await withAuthRetry(() =>
-      supabase
-        .from('team_members')
-        .delete({ count: 'exact' })
-        .eq('id', id)
-        .eq('coach_id', coachId)
+  /**
+   * Permanently deletes an athlete record, including any Storage documents
+   * (PSA certs, medical clearances) tied to them, and writes an audit log
+   * entry. This is a hard, irreversible delete.
+   *
+   * Deliberately NOT `.from('team_members').delete().eq('coach_id', coachId)`:
+   * that pattern trusts whatever `coachId` the caller happens to pass, which
+   * is an IDOR risk (OWASP A01:2021) — a modified client or a future bug
+   * could pass someone else's coach_id. Instead this calls a
+   * SECURITY DEFINER Postgres function that re-derives the caller's identity
+   * and role from their verified JWT and only allows the delete if they are
+   * an admin OR the coach who actually owns this athlete. See
+   * 2026xxxx_admin_delete_athlete.sql.
+   */
+  async deleteAthlete(id: string, _legacyCoachId?: string): Promise<void> {
+    // `_legacyCoachId` is intentionally unused — kept only so any existing
+    // `teamApi.deleteAthlete(id, coachId)` call sites still compile. Ownership
+    // is now verified server-side from the caller's own session, not from
+    // whatever id is passed in here. Update call sites to drop the second
+    // argument when convenient.
+    const { error } = await withAuthRetry(() =>
+      supabase.rpc('delete_athlete_permanently', { p_athlete_id: id })
     );
 
     if (error) {
@@ -179,16 +194,19 @@ export const teamApi = {
         code: error.code,
       });
 
-      throw new TeamApiError(
-        error.message ||
-          'Could not remove this athlete. Please try again.',
-        error.code || 'DELETE_FAILED'
-      );
-    }
+      const code = error.code === '42501' ? 'PERMISSION_DENIED' : error.code || 'DELETE_FAILED';
+      const message =
+        code === 'PERMISSION_DENIED'
+          ? "You don't have permission to delete this athlete."
+          : error.message || 'Could not remove this athlete. Please try again.';
 
-    if (!count) {
-      throw new TeamApiError('Athlete not found.', 'NOT_FOUND');
+      throw new TeamApiError(message, code);
     }
+  },
+
+  /** Alias used by the Archived Athletes view — same server-enforced delete. */
+  async permanentlyDeleteAthlete(id: string): Promise<void> {
+    return teamApi.deleteAthlete(id);
   },
 
   async archiveAthlete(id: string, coachId: string): Promise<void> {

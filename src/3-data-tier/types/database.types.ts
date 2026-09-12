@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      athlete_audit_log: {
+        Row: {
+          action: string
+          athlete_id: string
+          athlete_name: string
+          created_at: string
+          id: string
+          metadata: Json
+          performed_by: string
+          performed_by_role: string
+        }
+        Insert: {
+          action: string
+          athlete_id: string
+          athlete_name: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          performed_by: string
+          performed_by_role: string
+        }
+        Update: {
+          action?: string
+          athlete_id?: string
+          athlete_name?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          performed_by?: string
+          performed_by_role?: string
+        }
+        Relationships: []
+      }
       blocked_ips: {
         Row: {
           blocked_at: string
@@ -393,6 +426,45 @@ export type Database = {
         }
         Relationships: []
       }
+      resource_documents: {
+        Row: {
+          category: Database["public"]["Enums"]["resource_category"]
+          created_at: string
+          file_name: string
+          file_type: string
+          id: string
+          label: string
+          size_bytes: number | null
+          storage_path: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["resource_category"]
+          created_at?: string
+          file_name: string
+          file_type: string
+          id?: string
+          label: string
+          size_bytes?: number | null
+          storage_path: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["resource_category"]
+          created_at?: string
+          file_name?: string
+          file_type?: string
+          id?: string
+          label?: string
+          size_bytes?: number | null
+          storage_path?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       security_incidents: {
         Row: {
           created_at: string
@@ -477,6 +549,10 @@ export type Database = {
     }
     Functions: {
       accept_invite: { Args: { p_token: string }; Returns: undefined }
+      admin_delete_athlete: {
+        Args: { p_athlete_id: string }
+        Returns: undefined
+      }
       calculate_prisaa_age: {
         Args: { dob: string; event_year: number }
         Returns: number
@@ -489,6 +565,10 @@ export type Database = {
           p_invited_by: string
           p_role: string
         }
+        Returns: undefined
+      }
+      delete_athlete_permanently: {
+        Args: { p_athlete_id: string }
         Returns: undefined
       }
       expire_stale_annual_documents: { Args: never; Returns: undefined }
@@ -514,6 +594,7 @@ export type Database = {
     }
     Enums: {
       invite_status: "pending" | "accepted" | "expired" | "revoked"
+      resource_category: "guideline" | "form"
       user_role: "athlete" | "coach" | "school_admin" | "committee" | "admin"
     }
     CompositeTypes: {
@@ -643,6 +724,7 @@ export const Constants = {
   public: {
     Enums: {
       invite_status: ["pending", "accepted", "expired", "revoked"],
+      resource_category: ["guideline", "form"],
       user_role: ["athlete", "coach", "school_admin", "committee", "admin"],
     },
   },

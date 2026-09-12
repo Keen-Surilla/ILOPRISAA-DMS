@@ -33,7 +33,8 @@ export class SecureErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, sanitizedMessage: null });
+    // Forces the browser to completely reload the current page
+    window.location.reload();
   };
 
   render() {
@@ -45,25 +46,25 @@ export class SecureErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
           className="min-h-[200px] flex flex-col items-center justify-center gap-1 p-8 text-center"
         >
           <svg
-        width="140"
-        height="140"
-        viewBox="0 0 140 140"
-        fill="none"
-        className="mb-6 text-blue-300"
-      >
-        <rect x="45" y="35" width="50" height="45" rx="6" stroke="currentColor" strokeWidth="2.5" />
-        <circle cx="60" cy="55" r="4" fill="currentColor" />
-        <circle cx="80" cy="55" r="4" fill="currentColor" />
-        <path d="M58 68 Q70 62 82 68" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-        <line x1="70" y1="35" x2="70" y2="22" stroke="currentColor" strokeWidth="2.5" />
-        <circle cx="70" cy="18" r="4" stroke="currentColor" strokeWidth="2.5" />
-        <rect x="30" y="85" width="15" height="25" rx="4" stroke="currentColor" strokeWidth="2.5" transform="rotate(-15 37 97)" />
-        <rect x="95" y="85" width="15" height="25" rx="4" stroke="currentColor" strokeWidth="2.5" transform="rotate(15 102 97)" />
-        <line x1="20" y1="115" x2="35" y2="105" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-        <line x1="105" y1="105" x2="120" y2="115" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
-        <circle cx="18" cy="118" r="2.5" fill="currentColor" opacity="0.4" />
-        <circle cx="122" cy="118" r="2.5" fill="currentColor" opacity="0.4" />
-      </svg>
+            width="140"
+            height="140"
+            viewBox="0 0 140 140"
+            fill="none"
+            className="mb-6 text-blue-300"
+          >
+            <rect x="45" y="35" width="50" height="45" rx="6" stroke="currentColor" strokeWidth="2.5" />
+            <circle cx="60" cy="55" r="4" fill="currentColor" />
+            <circle cx="80" cy="55" r="4" fill="currentColor" />
+            <path d="M58 68 Q70 62 82 68" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+            <line x1="70" y1="35" x2="70" y2="22" stroke="currentColor" strokeWidth="2.5" />
+            <circle cx="70" cy="18" r="4" stroke="currentColor" strokeWidth="2.5" />
+            <rect x="30" y="85" width="15" height="25" rx="4" stroke="currentColor" strokeWidth="2.5" transform="rotate(-15 37 97)" />
+            <rect x="95" y="85" width="15" height="25" rx="4" stroke="currentColor" strokeWidth="2.5" transform="rotate(15 102 97)" />
+            <line x1="20" y1="115" x2="35" y2="105" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+            <line x1="105" y1="105" x2="120" y2="115" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+            <circle cx="18" cy="118" r="2.5" fill="currentColor" opacity="0.4" />
+            <circle cx="122" cy="118" r="2.5" fill="currentColor" opacity="0.4" />
+          </svg>
 
           <h2 className="text-lg font-bold text-slate-700 mb-1.5">
             {this.props.fallbackTitle ?? 'Something went wrong'}

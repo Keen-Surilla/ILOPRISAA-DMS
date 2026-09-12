@@ -27,7 +27,6 @@ const FILTER_OPTIONS: { value: TypeFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'event', label: 'Matches' },
   { value: 'deadline', label: 'Deadlines' },
-  { value: 'meeting', label: 'Practice' },
 ];
 
 export interface NewEventInput {
@@ -428,7 +427,7 @@ export function EventCalendar({ events, isLoading, canManage, onMonthChange, onD
                       : 'bg-white dark:bg-transparent border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  {opt.label} ({count})
+                  {opt.label} {count}
                 </button>
               );
             })}
