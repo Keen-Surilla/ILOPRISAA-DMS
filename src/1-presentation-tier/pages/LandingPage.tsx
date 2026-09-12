@@ -26,3 +26,4 @@ export default function LandingPage() {
     </div>
   );
 }
+//landing page is the first page that users see when they visit the application. It provides an overview of the application, its features, and how to get started. The page includes sections such as a hero section, member institutions, how it works, roles section, state machine section, and access section. The header and footer are also included for navigation and additional information.

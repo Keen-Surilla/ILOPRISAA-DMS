@@ -6,12 +6,18 @@ import { useAuthStore } from './2-application-tier/stores/authStore';
 import { supabase } from './3-data-tier/config/SupabaseClient';
 import { ForgotPasswordPage } from './1-presentation-tier/components/landing/ForgotPasswordPage';
 
+
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
 const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/CommitteeDashboard'));
 const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
 const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/SuperAdminDashboard'));
 const AcceptInvitePage = lazy(() => import('./1-presentation-tier/pages/AcceptInvitePage'));
+const AboutILOPRISAA = lazy(() => import('./1-presentation-tier/pages/AboutILOPRISAA'));
+const UsagePolicy = lazy(() => import('./1-presentation-tier/pages/UsagePolicy'));
+const PrivacyPolicy = lazy(() => import('./1-presentation-tier/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./1-presentation-tier/pages/TermsOfService'));
+
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
@@ -55,6 +61,10 @@ export default function App() {
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/about" element={<AboutILOPRISAA />} />
+            <Route path="/usage-policy" element={<UsagePolicy />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/school-admin/*" element={<ProtectedRoute allowedRoles={['school_admin']}><SchoolAdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />
