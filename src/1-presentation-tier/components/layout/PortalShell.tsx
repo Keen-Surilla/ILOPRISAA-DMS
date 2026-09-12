@@ -5,7 +5,7 @@ import { useAuthStore } from '../../../2-application-tier/stores/authStore';
 import type { UserRole } from '../../../3-data-tier/types/database.types.extras';
 import Logo2 from "../../../assets/Frame 100.svg";
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { PanelLeft, LogOut, Settings, Info, ChevronRight } from 'lucide-react';
+import { PanelLeft, LogOut, Settings, Info, ChevronRight, ExternalLink } from 'lucide-react';
 
 
 
@@ -53,6 +53,7 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isLearnMoreOpen, setIsLearnMoreOpen] = useState(false);
 
   const handleLogout = async () => {
     setIsLogoutModalOpen(false);
@@ -159,8 +160,15 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
           {/* Popup account menu: only appears after clicking the profile row */}
           {isAccountMenuOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setIsAccountMenuOpen(false)} aria-hidden="true" />
-              <div className="absolute bottom-full left-3.5 right-3.5 mb-2 z-50 rounded-xl border border-slate-800 bg-[#0f172a] shadow-2xl overflow-hidden">
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => {
+                  setIsAccountMenuOpen(false);
+                  setIsLearnMoreOpen(false);
+                }}
+                aria-hidden="true"
+              />
+              <div className="absolute bottom-full left-3.5 right-3.5 mb-2 z-50 rounded-xl border border-slate-800 bg-[#0f172a] shadow-2xl overflow-visible">
                 <div className="px-4 py-3 border-b border-slate-800">
                   <p className="text-xs text-slate-400 truncate">{user?.email}</p>
                 </div>
@@ -172,6 +180,7 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
                       type="button"
                       onClick={() => {
                         setIsAccountMenuOpen(false);
+                        setIsLearnMoreOpen(false);
                         onSettingsClick(); // <-- CALL THE PROP INSTEAD OF NAVIGATING
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-slate-100 transition-colors duration-150"
@@ -181,20 +190,61 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAccountMenuOpen(false);
-                      navigate('/learn-more');
-                    }}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/80 hover:text-slate-100 transition-colors duration-150"
-                  >
-                    <span className="flex items-center gap-3">
-                      <Info className="w-4 h-4 shrink-0" />
-                      Learn more
-                    </span>
-                    <ChevronRight className="w-4 h-4 shrink-0 text-slate-500" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={isLearnMoreOpen}
+                      onClick={() => setIsLearnMoreOpen((prev) => !prev)}
+                      className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium transition-colors duration-150 ${
+                        isLearnMoreOpen
+                          ? 'bg-slate-800/80 text-slate-100'
+                          : 'text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Info className="w-4 h-4 shrink-0" />
+                        Learn more
+                      </span>
+                      <ChevronRight
+                        className={`w-4 h-4 shrink-0 text-slate-500 transition-transform duration-150 ${
+                          isLearnMoreOpen ? 'text-slate-300' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {isLearnMoreOpen && (
+                      <div
+                        role="menu"
+                        aria-label="Learn more"
+                        className="absolute left-[calc(100%+8px)] bottom-[-0px] z-[60] w-[270px] overflow-hidden rounded-xl border border-slate-700 bg-[#0f172a] shadow-xl ring-1 ring-black/10"
+                      >
+                        {[
+                          { label: 'About ILOPRISAA', path: '/about' },
+                          { label: 'Usage Policy', path: '/usage-policy' },
+                          { label: 'Privacy Policy', path: '/privacy-policy' },
+                          { label: 'Terms of Service', path: '/terms-of-service' },
+                        ].map((item, index) => (
+                          <button
+                            key={item.path}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setIsLearnMoreOpen(false);
+                              setIsAccountMenuOpen(false);
+                              navigate(item.path);
+                            }}
+                            className={`group w-full flex items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium text-slate-200 transition-colors duration-150 hover:bg-slate-800 hover:text-white ${
+                              index > 0 ? 'border-t border-slate-800' : ''
+                            }`}
+                          >
+                            <span className="truncate">{item.label}</span>
+                            <ExternalLink className="h-4 w-4 shrink-0 text-slate-500 group-hover:text-slate-300" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <button
@@ -215,7 +265,10 @@ export function PortalShell({ portalTitle, navGroups = [], onSettingsClick, chil
           {/* Profile row: click to reveal the account menu above */}
           <button
             type="button"
-            onClick={() => setIsAccountMenuOpen((prev) => !prev)}
+            onClick={() => {
+                setIsAccountMenuOpen((prev) => !prev);
+                setIsLearnMoreOpen(false);
+              }}
             title={!isSidebarOpen ? (user?.full_name ?? 'Account') : undefined}
             className={`w-full flex items-center rounded-lg transition-[background-color,transform] duration-150 active:scale-[0.98] hover:bg-slate-800/80 ${
               isSidebarOpen ? 'gap-3 px-2 py-2 justify-start' : 'justify-center p-2'

@@ -5,6 +5,7 @@ import { ProtectedRoute } from './1-presentation-tier/components/core/ProtectedR
 import { useAuthStore } from './2-application-tier/stores/authStore';
 import { supabase } from './3-data-tier/config/SupabaseClient';
 
+
 const LandingPage = lazy(() => import('./1-presentation-tier/pages/LandingPage'));
 const LoginPage = lazy(() => import('./1-presentation-tier/pages/LoginPage'));
 const CoachDashboard = lazy(() => import('./1-presentation-tier/pages/CoachDashboard'));
@@ -12,7 +13,11 @@ const CommitteeDashboard = lazy(() => import('./1-presentation-tier/pages/Commit
 const SchoolAdminDashboard = lazy(() => import('./1-presentation-tier/pages/SchoolAdminDashboard'));
 const AdminDashboard = lazy(() => import('./1-presentation-tier/pages/SuperAdminDashboard'));
 const AcceptInvitePage = lazy(() => import('./1-presentation-tier/pages/AcceptInvitePage'));
-const LearnMore = lazy(() => import('./1-presentation-tier/pages/LearnMore'));
+const AboutILOPRISAA = lazy(() => import('./1-presentation-tier/pages/AboutILOPRISAA'));
+const UsagePolicy = lazy(() => import('./1-presentation-tier/pages/UsagePolicy'));
+const PrivacyPolicy = lazy(() => import('./1-presentation-tier/pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./1-presentation-tier/pages/TermsOfService'));
+
 
 const RoleBasedRedirect = () => {
   const { role } = useAuthStore();
@@ -53,10 +58,13 @@ export default function App() {
         <Suspense>
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/learn-more" element={<LearnMore />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/home" element={<RoleBasedRedirect />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
+            <Route path="/about" element={<AboutILOPRISAA />} />
+            <Route path="/usage-policy" element={<UsagePolicy />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route path="/school-admin/*" element={<ProtectedRoute allowedRoles={['school_admin']}><SchoolAdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/coach/*" element={<ProtectedRoute allowedRoles={['coach', 'athlete']}><CoachDashboard /></ProtectedRoute>} />
