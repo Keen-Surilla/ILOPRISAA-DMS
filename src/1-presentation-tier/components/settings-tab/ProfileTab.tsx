@@ -157,9 +157,9 @@ export default function ProfileTab({
         <FieldRow label="Institution">
           <SchoolList
             value={institution}
-            onChange={(name, id) => {
+            onChange={(name, institutionName) => {
               setInstitution(name);
-              setFormData({ ...formData, institution_id: id });
+              setFormData({ ...formData, institution_id: institutionName });
             }}
             placeholder="e.g. Western Institute of Technology"
             inputClassName={cn(sharedInputBase, 'pl-3')}

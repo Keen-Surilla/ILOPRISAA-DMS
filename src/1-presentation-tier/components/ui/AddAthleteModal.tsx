@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X, Mail, UserPlus, Check, Info, Pencil, GraduationCap, AlertTriangle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '../../../3-data-tier/api/teamApi';
@@ -65,6 +65,7 @@ interface AddAthleteModalProps {
   onClose: () => void;
   coachId: string;
   coachSport?: string | null;
+  coachSports?: readonly string[];
   eligibilityCheckDate?: string | null;
   athleteToEdit?: AthleteData | null;
 }
@@ -86,6 +87,7 @@ export function AddAthleteModal({
   onClose,
   coachId,
   coachSport,
+  coachSports,
   eligibilityCheckDate,
   athleteToEdit,
 }: AddAthleteModalProps) {
@@ -99,17 +101,49 @@ export function AddAthleteModal({
 
   const isEditMode = !!athleteToEdit;
 
+  const allowedSports = useMemo(() => {
+    const sourceSports =
+      coachSports && coachSports.length > 0
+        ? coachSports
+        : coachSport
+          ? [coachSport]
+          : [];
+
+    return Array.from(
+      new Set(
+        sourceSports
+          .map((sport) => sport.trim())
+          .filter(Boolean)
+      )
+    );
+  }, [coachSport, coachSports]);
+
+  const currentSportIsAllowed =
+    !newAthlete.sport || allowedSports.includes(newAthlete.sport);
+  const hasInvalidLegacySport =
+    isEditMode &&
+    Boolean(newAthlete.sport) &&
+    allowedSports.length > 0 &&
+    !currentSportIsAllowed;
+  const shouldShowSportSelect =
+    allowedSports.length > 1 || hasInvalidLegacySport;
+
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       setIsClosing(false);
       setErrorMessage(null);
+      const defaultSport = allowedSports[0] ?? '';
       
       if (athleteToEdit) {
+        const existingSport = athleteToEdit.sport?.trim() ?? '';
         setNewAthlete({
           name: athleteToEdit.name || '',
           email: athleteToEdit.email || '',
-          sport: athleteToEdit.sport || coachSport || '',
+          sport:
+            existingSport && (allowedSports.length === 0 || allowedSports.includes(existingSport))
+              ? existingSport
+              : existingSport || defaultSport,
           gender: athleteToEdit.gender || '',
           division: athleteToEdit.division || '',
           year_level: athleteToEdit.year_level || '',
@@ -118,7 +152,7 @@ export function AddAthleteModal({
           date_of_birth: athleteToEdit.date_of_birth || '',
         });
       } else {
-        setNewAthlete({ ...EMPTY_ATHLETE, sport: coachSport || '' });
+        setNewAthlete({ ...EMPTY_ATHLETE, sport: defaultSport });
       }
     } else if (shouldRender) {
       setIsClosing(true);
@@ -128,7 +162,7 @@ export function AddAthleteModal({
       }, 150);
       return () => clearTimeout(timeout);
     }
-  }, [isOpen, athleteToEdit, coachSport, shouldRender]);
+  }, [isOpen, athleteToEdit, allowedSports, shouldRender]);
 
   const saveAthleteMutation = useMutation<any, Error, any>({
     mutationFn: async (athleteData) => {
@@ -195,8 +229,13 @@ export function AddAthleteModal({
       return;
     }
 
-    if (!newAthlete.sport) {
+    if (allowedSports.length === 0 || !newAthlete.sport) {
       setErrorMessage('Your coach profile does not have a sport assigned.');
+      return;
+    }
+
+    if (!allowedSports.includes(newAthlete.sport)) {
+      setErrorMessage('Please choose one of your assigned sports before saving.');
       return;
     }
 
@@ -262,6 +301,7 @@ export function AddAthleteModal({
       course: newAthlete.division === 'tertiary' ? newAthlete.course?.trim() : null,
       year_graduated_shs: newAthlete.division === 'tertiary' ? newAthlete.year_graduated_shs?.trim() : null,
       date_of_birth: newAthlete.date_of_birth,
+      sport: newAthlete.sport,
       gender: newAthlete.gender,
     });
   };
@@ -476,13 +516,44 @@ export function AddAthleteModal({
               <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-1.5">
                 Assigned Sport
               </label>
-              <input
-                type="text"
-                value={coachSport || newAthlete.sport || ''}
-                readOnly
-                placeholder="Set your sport in Settings"
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/30 text-slate-600 dark:text-slate-400 cursor-not-allowed"
-              />
+              {shouldShowSportSelect ? (
+                <>
+                  <select
+                    value={newAthlete.sport}
+                    onChange={(e) => setNewAthlete({ ...newAthlete, sport: e.target.value })}
+                    className={`w-full border rounded-xl px-3.5 py-2.5 text-sm bg-white dark:bg-slate-800/60 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition ${
+                      hasInvalidLegacySport
+                        ? 'border-amber-300 dark:border-amber-500/50'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {hasInvalidLegacySport && (
+                      <option value={newAthlete.sport} disabled>
+                        {newAthlete.sport} (no longer assigned)
+                      </option>
+                    )}
+                    {allowedSports.map((sport) => (
+                      <option key={sport} value={sport}>
+                        {sport}
+                      </option>
+                    ))}
+                  </select>
+                  {hasInvalidLegacySport && (
+                    <p className="mt-1.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Choose one of your assigned sports before saving.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <input
+                  type="text"
+                  value={newAthlete.sport || allowedSports[0] || ''}
+                  readOnly
+                  disabled={allowedSports.length === 0}
+                  placeholder="Set your sport in Settings"
+                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/30 text-slate-600 dark:text-slate-400 cursor-not-allowed disabled:opacity-60"
+                />
+              )}
             </div>
 
             <div>

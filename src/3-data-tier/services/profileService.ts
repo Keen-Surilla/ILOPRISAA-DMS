@@ -1,4 +1,5 @@
 import { supabase } from '../config/SupabaseClient';
+import { canonicalizeInstitutionName } from '../constant/schools';
 
 export interface CoachProfile {
   id: string;
@@ -31,9 +32,16 @@ export async function getProfile(userId: string): Promise<CoachProfile | null> {
 }
 
 export const updateProfile = async (userId: string, data: any) => {
+  const payload = {
+    ...data,
+    ...(Object.prototype.hasOwnProperty.call(data, 'institution_id')
+      ? { institution_id: canonicalizeInstitutionName(data.institution_id) }
+      : {}),
+  };
+
   const { data: updatedData, error } = await supabase
     .from('profiles')
-    .update(data)
+    .update(payload)
     .eq('id', userId)
     .select() // <-- IMPORTANT: Ask Supabase to return the updated row
     .single(); // <-- IMPORTANT: Ensure exactly one row is returned

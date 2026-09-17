@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Upload, Check, ExternalLink, Trash2, Loader2, ChevronDown, Sparkles, AlertTriangle, FolderUp } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -248,6 +249,17 @@ export function DocumentChecklistModal({
     setBulkFiles([]);
   }, [athleteId]);
 
+  useEffect(() => {
+    if (!shouldRender || docPendingDelete || docPendingReplace) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [shouldRender, docPendingDelete, docPendingReplace, onClose]);
+
   const { data: documents = [], isLoading, isError } = useQuery({
     queryKey: ['documents', athleteId],
     queryFn: () => documentsApi.getDocumentsForAthlete(athleteId as string),
@@ -425,11 +437,13 @@ export function DocumentChecklistModal({
   };
 
   if (!shouldRender) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  const modal = (
     <div
       role="dialog"
       aria-modal="true"
+      onClick={onClose}
       onDragOver={(e) => {
         e.preventDefault();
         if (!readOnly) setIsDraggingOver(true);
@@ -444,29 +458,30 @@ export function DocumentChecklistModal({
         setIsDraggingOver(false);
         if (!readOnly && e.dataTransfer.files?.length) addFilesToBulkBatch(e.dataTransfer.files);
       }}
-      className={`fixed inset-0 flex items-center justify-center z-50 p-4 transition-colors motion-reduce:animate-none ${
-        isDraggingOver ? 'bg-blue-900/40 backdrop-blur-md' : 'bg-slate-900/40 backdrop-blur-sm'
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 transition-colors motion-reduce:animate-none ${
+        isDraggingOver ? 'bg-blue-900/40 backdrop-blur-md' : 'bg-slate-950/50 backdrop-blur-[1px]'
       } ${isClosing ? 'animate-out fade-out duration-150' : 'animate-in fade-in duration-200'}`}
     >
       <div
-        className={`bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col pointer-events-auto motion-reduce:animate-none ${
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col pointer-events-auto motion-reduce:animate-none ${
           isClosing
             ? 'animate-out fade-out zoom-out-95 duration-150'
             : 'animate-in fade-in zoom-in-95 duration-200'
         }`}
       >
         {isDraggingOver && (
-          <div className="absolute inset-0 z-50 bg-blue-50/90 border-4 border-blue-400 border-dashed rounded-2xl flex flex-col items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 z-50 bg-blue-50/90 border-4 border-blue-400 border-dashed rounded-xl flex flex-col items-center justify-center pointer-events-none">
             <FolderUp className="w-16 h-16 text-blue-500 mb-4 animate-bounce" />
             <h2 className="text-2xl font-bold text-blue-700">Drop files to upload</h2>
             <p className="text-blue-600 mt-2">AI will automatically sort them</p>
           </div>
         )}
 
-        <div className="flex justify-between items-start p-6 pb-4 border-b border-slate-100">
+        <div className="flex justify-between items-start p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
           <div>
-            <h3 className="font-bold text-lg text-slate-800">Documents — {athleteName}</h3>
-            <p className="text-xs text-slate-500 mt-1">
+            <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">Documents — {athleteName}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               {readOnly
                 ? 'View-only, your coach manages uploads for these documents.'
                 : "Exit anytime, every upload saves immediately, so you'll pick up right where you left off."}
@@ -474,7 +489,7 @@ export function DocumentChecklistModal({
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 active:scale-90 shrink-0 transition-[color,transform]"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 active:scale-90 shrink-0 transition-[color,transform]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -716,7 +731,7 @@ export function DocumentChecklistModal({
           )}
         </div>
 
-        <div className="p-6 pt-2 border-t border-slate-100">
+        <div className="p-6 pt-2 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={onClose}
@@ -825,4 +840,6 @@ export function DocumentChecklistModal({
       )}
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

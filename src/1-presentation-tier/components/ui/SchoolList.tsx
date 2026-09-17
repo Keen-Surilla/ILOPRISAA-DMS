@@ -57,7 +57,7 @@ export function SchoolList({ value, onChange, required, placeholder = 'Enter you
         required={required}
         value={value}
         onChange={(e) => {
-          onChange(e.target.value, '');
+          onChange(e.target.value, e.target.value);
           setShowSuggestions(true);
           updatePosition();
         }}
@@ -80,7 +80,7 @@ export function SchoolList({ value, onChange, required, placeholder = 'Enter you
                 <li
                   key={school.id}
                   onClick={() => {
-                    onChange(school.name, school.id);
+                    onChange(school.name, school.name);
                     setShowSuggestions(false);
                   }}
                   className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer flex items-center justify-between text-sm text-slate-700 border-b border-slate-50 last:border-0"

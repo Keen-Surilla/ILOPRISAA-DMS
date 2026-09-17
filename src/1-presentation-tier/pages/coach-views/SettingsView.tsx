@@ -6,8 +6,9 @@ import { useThemeStore } from '../../../2-application-tier/stores/themeStore';
 import { useTeamRoster } from '../../../2-application-tier/hooks/useTeamRoster';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile } from '../../../3-data-tier/services/profileService';
+import { coachProfileApi } from '../../../3-data-tier/api/coachProfileApi';
 import { supabase } from '../../../3-data-tier/config/SupabaseClient';
-import { ILOPRISAA_SCHOOLS } from '../../../3-data-tier/constant/schools';
+import { findSchool } from '../../../3-data-tier/constant/schools';
 import { ILOPRISAA_SPORTS } from '../../../3-data-tier/constant/sports';
 import { cn, generateRandomSeed, scrollbarStyles, type SettingsFormData } from '../../components/settings-tab/sharedui';
 import ProfileTab from '../../components/settings-tab/ProfileTab';
@@ -102,6 +103,16 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
     enabled: !!user?.id
   });
 
+  const {
+    data: coachProfile,
+    isLoading: isCoachProfileLoading,
+  } = useQuery({
+    queryKey: ['coachProfileDetails', user?.id],
+    queryFn: () => coachProfileApi.getMyProfile(user?.id || ''),
+    enabled: !!user?.id,
+  });
+  const isSettingsLoading = isLoading || isCoachProfileLoading;
+
   const roster = useTeamRoster(user?.id);
   const athleteCount = (roster as any)?.athletes?.length ?? 0;
 
@@ -132,8 +143,17 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
   // leaves the field instead.
   const isTypingRef = useRef(false);
 
+  const normalizeSecondaryDisciplines = (values: string[]) =>
+    Array.from(
+      new Set(
+        values
+          .map((value) => value.trim())
+          .filter(Boolean)
+      )
+    );
+
   useEffect(() => {
-    if (profile) {
+    if (profile && !isCoachProfileLoading) {
       const initialData = {
         full_name: profile.full_name || '',
         phone: profile.phone || '',
@@ -143,7 +163,7 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
         institution_id: profile.institution_id || '',
         team_motto: profile.team_motto || '',
         avatar_seed: (profile as any).avatar_seed || user?.id || 'coach',
-        secondary_disciplines: (profile as any).secondary_disciplines || [],
+        secondary_disciplines: coachProfile?.secondaryDisciplines ?? [],
         notify_sms_missing_document: (profile as any).notify_sms_missing_document ?? true,
         notify_committee_status: (profile as any).notify_committee_status ?? true,
         notify_roster_freeze: (profile as any).notify_roster_freeze ?? true,
@@ -157,21 +177,33 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
       initialLoadDone.current = true;
 
       if (profile.institution_id) {
-        const matchedSchool = ILOPRISAA_SCHOOLS.find(s => s.id === profile.institution_id);
+        const matchedSchool = findSchool(profile.institution_id);
         setInstitution(matchedSchool ? matchedSchool.name : profile.institution_id);
       }
     }
-  }, [profile, user?.id]);
+  }, [profile, coachProfile, isCoachProfileLoading, user?.id]);
 
   const selectedSchool = useMemo(
-    () => ILOPRISAA_SCHOOLS.find((s: any) => s.id === formData.institution_id),
+    () => findSchool(formData.institution_id) ?? undefined,
     [formData.institution_id]
   );
 
   const updateMutation = useMutation({
-    mutationFn: (updatedData: any) => updateProfile(user?.id || '', updatedData),
+    mutationFn: async ({
+      profileData,
+      secondaryDisciplines,
+    }: {
+      profileData: any;
+      secondaryDisciplines: string[];
+    }) => {
+      const profileId = user?.id || '';
+      await updateProfile(profileId, profileData);
+      await coachProfileApi.saveSecondaryDisciplines(profileId, secondaryDisciplines);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['coachProfile', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['coachProfileDetails', user?.id] });
+      lastSavedData.current = JSON.stringify(formData);
       setSaveCount((prev) => {
         const nextCount = prev + 1;
         setToast({ type: 'success', message: `Saved (x${nextCount})` });
@@ -205,14 +237,19 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
       ocr_data_processing,
       ...safeDatabaseFields
     } = formData;
+    const normalizedSecondaryDisciplines = normalizeSecondaryDisciplines(
+      formData.secondary_disciplines
+    );
 
     const payloadToSave = {
       ...safeDatabaseFields,
       dob: safeDatabaseFields.dob === '' ? null : safeDatabaseFields.dob
     };
 
-    updateMutation.mutate(payloadToSave);
-    lastSavedData.current = currentDataString;
+    updateMutation.mutate({
+      profileData: payloadToSave,
+      secondaryDisciplines: normalizedSecondaryDisciplines,
+    });
   };
 
   // Called onFocus of a free-typing field: marks typing as in-progress and
@@ -397,7 +434,7 @@ export default function SettingsView({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          {isLoading ? (
+          {isSettingsLoading ? (
             <div className="p-8 space-y-6 animate-pulse w-full max-w-3xl">
               <div className="h-12 bg-slate-100 dark:bg-white/[0.06] rounded-lg w-full"></div>
               <div className="h-12 bg-slate-100 dark:bg-white/[0.06] rounded-lg w-full"></div>

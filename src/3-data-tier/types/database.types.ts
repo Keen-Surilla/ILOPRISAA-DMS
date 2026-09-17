@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -11,6 +11,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -359,6 +384,61 @@ export type Database = {
           id?: string
         }
         Relationships: []
+      }
+      notifications: {
+        Row: {
+          athlete_id: string | null
+          created_at: string
+          created_by_profile_id: string
+          id: string
+          message: string
+          read_at: string | null
+          recipient_profile_id: string
+          type: string
+        }
+        Insert: {
+          athlete_id?: string | null
+          created_at?: string
+          created_by_profile_id: string
+          id?: string
+          message: string
+          read_at?: string | null
+          recipient_profile_id: string
+          type: string
+        }
+        Update: {
+          athlete_id?: string | null
+          created_at?: string
+          created_by_profile_id?: string
+          id?: string
+          message?: string
+          read_at?: string | null
+          recipient_profile_id?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_created_by_profile_id_fkey"
+            columns: ["created_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -721,6 +801,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       invite_status: ["pending", "accepted", "expired", "revoked"],

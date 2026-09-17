@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   FileText,
   Users,
@@ -25,6 +25,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '../../../3-data-tier/api/teamApi';
 import { listEvents } from '../../../3-data-tier/services/eventService';
 import { TOTAL_REQUIRED_DOCUMENTS } from '../../../3-data-tier/api/documentsApi';
+import { coachProfileApi } from '../../../3-data-tier/api/coachProfileApi';
 import {
   getScreeningRoster,
   type AthleteScreeningStatus,
@@ -35,43 +36,7 @@ import { AthleteExportSelectModal } from '../../components/ui/AthleteExportSelec
 import { getExportData } from '../../../3-data-tier/api/exportApi';
 // TODO: confirm this path once the tertiary generator's real location is settled
 import { generatePrisaaForm01BTertiary } from '../../../3-data-tier/services/prisaaForm01BTertiary';
-
-const ILOPRISAA_SCHOOLS: Record<string, string> = {
-  'western institute of technology': 'WIT',
-  'central philippine university': 'CPU',
-  'john b. lacson foundation maritime university': 'JBLFMU',
-  'hua siong college of iloilo': 'HSCI',
-  "st. robert's international college": 'SRIC',
-  'st. roberts international college': 'SRIC',
-  "iloilo doctors' college": 'IDC',
-  'iloilo doctors college': 'IDC',
-  'ateneo de iloilo': 'ADI',
-  'colegio de san jose': 'CSJ',
-  'santa isabel college of iloilo': 'SICI',
-  'iloilo scholastic academy': 'ISA',
-  'st. paul university iloilo': 'SPUI',
-  'university of san agustin': 'USA',
-  'iloilo integrated school foundation': 'IISF',
-};
-
-
-
-export function getSchoolAbbreviation(schoolName?: string | null): string {
-  if (!schoolName) return 'ILOPRISAA';
-
-  const normalized = schoolName.trim().toLowerCase();
-
-  if (ILOPRISAA_SCHOOLS[normalized]) {
-    return ILOPRISAA_SCHOOLS[normalized];
-  }
-
-  return schoolName
-    .split(/[\s-]+/)
-    .map((word) => word[0])
-    .filter((char) => char && /[a-zA-Z]/.test(char))
-    .join('')
-    .toUpperCase();
-}
+import { canonicalizeInstitutionName, getSchoolAbbreviation } from '../../../3-data-tier/constant/schools';
 
 export function formatSportTeamName(rawSport?: string | null): string {
   if (!rawSport) return 'Team';
@@ -83,29 +48,8 @@ export function formatSportTeamName(rawSport?: string | null): string {
   return `${cleanSport} Team`;
 }
 
-// Reverse of ILOPRISAA_SCHOOLS (abbreviation -> full, properly-cased name).
-// TODO: verify `profile.institution_id` actually stores one of these abbreviations
-// (e.g. "WIT") rather than a full name or a raw DB id — this lookup assumes it does.
-const SCHOOL_ABBREVIATION_TO_FULL_NAME: Record<string, string> = {
-  WIT: 'Western Institute of Technology',
-  CPU: 'Central Philippine University',
-  JBLFMU: 'John B. Lacson Foundation Maritime University',
-  HSCI: 'Hua Siong College of Iloilo',
-  SRIC: "St. Robert's International College",
-  IDC: "Iloilo Doctors' College",
-  ADI: 'Ateneo de Iloilo',
-  CSJ: 'Colegio de San Jose',
-  SICI: 'Santa Isabel College of Iloilo',
-  ISA: 'Iloilo Scholastic Academy',
-  SPUI: 'St. Paul University Iloilo',
-  USA: 'University of San Agustin',
-  IISF: 'Iloilo Integrated School Foundation',
-};
-
 export function getFullSchoolName(institutionId?: string | null): string {
-  if (!institutionId) return '';
-  const key = institutionId.trim().toUpperCase();
-  return SCHOOL_ABBREVIATION_TO_FULL_NAME[key] ?? institutionId;
+  return canonicalizeInstitutionName(institutionId) ?? '';
 }
 
 // Best-effort fallback for when prisaa_academic_data has no lastName/firstName
@@ -179,12 +123,17 @@ type EligibilityFilter =
   | 'pending_verification'
   | 'missing_documents';
 
-const DIVISION_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'elementary', label: 'Elementary' },
-  { key: 'highschool', label: 'High School' },
-  { key: 'tertiary', label: 'Tertiary' },
+const CATEGORY_FILTERS = [
+  { key: 'all', label: 'All Categories', division: null, gender: null },
+  { key: 'elementary_boys', label: 'Elementary Boys', division: 'elementary', gender: 'Male' },
+  { key: 'elementary_girls', label: 'Elementary Girls', division: 'elementary', gender: 'Female' },
+  { key: 'highschool_boys', label: 'High School Boys', division: 'highschool', gender: 'Male' },
+  { key: 'highschool_girls', label: 'High School Girls', division: 'highschool', gender: 'Female' },
+  { key: 'tertiary_men', label: 'Tertiary Men', division: 'tertiary', gender: 'Male' },
+  { key: 'tertiary_women', label: 'Tertiary Women', division: 'tertiary', gender: 'Female' },
 ] as const;
+
+type CategoryFilter = (typeof CATEGORY_FILTERS)[number]['key'];
 
 function EligibilityBadge({
   status,
@@ -303,11 +252,32 @@ export function useTeamDashboardData(currentUserId: string) {
     staleTime: 1000 * 60 * 5,
   });
 
+  const { data: coachProfile } = useQuery({
+    queryKey: ['coachProfileDetails', currentUserId],
+    queryFn: () => coachProfileApi.getMyProfile(currentUserId),
+    enabled: !!currentUserId,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const allowedCoachSports = useMemo(() => {
+    return Array.from(
+      new Set(
+        [
+          profile?.sport,
+          ...(coachProfile?.secondaryDisciplines ?? []),
+        ]
+          .map((sport) => sport?.trim() ?? '')
+          .filter(Boolean)
+      )
+    );
+  }, [profile?.sport, coachProfile?.secondaryDisciplines]);
+
   return {
     athletes,
     eventCount: upcomingEvents.length,
     upcomingEvents,
     profile,
+    allowedCoachSports,
     isLoading:
       isLoadingAthletes ||
       isLoadingEvents ||
@@ -326,6 +296,7 @@ export default function TeamView() {
     eventCount,
     upcomingEvents,
     profile,
+    allowedCoachSports,
     isLoading,
   } = useTeamDashboardData(currentUserId);
 
@@ -488,10 +459,10 @@ export default function TeamView() {
     gender: '' | 'Male' | 'Female';
   } | null>(null);
 
-  const [divisionFilter, setDivisionFilter] =
-    useState<(typeof DIVISION_FILTERS)[number]['key']>('all');
+  const [categoryFilter, setCategoryFilter] =
+    useState<CategoryFilter>('all');
 
-  const [showDivisionFilters, setShowDivisionFilters] =
+  const [showCategoryFilters, setShowCategoryFilters] =
     useState(false);
 
   const [eligibilityFilter, setEligibilityFilter] =
@@ -535,9 +506,7 @@ export default function TeamView() {
   );
 
   const getTeamAcronym = (id?: string) => {
-    if (!id) return 'TM';
-
-    return id.substring(0, 10).toUpperCase();
+    return getSchoolAbbreviation(id);
   };
 
   const eligibilityEventYear = useMemo(() => {
@@ -552,9 +521,17 @@ export default function TeamView() {
     const result = athletes.filter((athlete) => {
       const screening = screeningByAthleteId.get(athlete.id);
 
-      const matchesDivision =
-        divisionFilter === 'all' ||
-        athlete.division === divisionFilter;
+      const selectedCategory = CATEGORY_FILTERS.find(
+        (filter) => filter.key === categoryFilter
+      );
+
+      const matchesCategory =
+  categoryFilter === 'all' ||
+  (
+    athlete.division === selectedCategory?.division &&
+    (athlete.gender ?? '').trim().toLowerCase() ===
+      selectedCategory?.gender?.toLowerCase()
+  );
 
       const matchesEligibility =
         eligibilityFilter === 'all' ||
@@ -567,7 +544,7 @@ export default function TeamView() {
         athlete.id.toLowerCase().includes(query);
 
       return (
-        matchesDivision &&
+        matchesCategory &&
         matchesEligibility &&
         matchesSearch
       );
@@ -587,7 +564,7 @@ export default function TeamView() {
   }, [
     athletes,
     screeningByAthleteId,
-    divisionFilter,
+    categoryFilter,
     eligibilityFilter,
     searchQuery,
     sortOrder,
@@ -616,7 +593,7 @@ export default function TeamView() {
   useEffect(() => {
     setCurrentPage(1);
   }, [
-    divisionFilter,
+    categoryFilter,
     eligibilityFilter,
     searchQuery,
     sortOrder,
@@ -850,7 +827,7 @@ export default function TeamView() {
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
 
-            {/* TITLE + DIVISION FILTER */}
+            {/* TITLE + CATEGORY FILTER */}
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -861,38 +838,38 @@ export default function TeamView() {
                   <button
                     type="button"
                     onClick={() =>
-                      setShowDivisionFilters((v) => !v)
+                      setShowCategoryFilters((v) => !v)
                     }
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                   >
                     <Filter className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
 
-                    {DIVISION_FILTERS.find(
-                      (f) => f.key === divisionFilter
+                    {CATEGORY_FILTERS.find(
+                      (f) => f.key === categoryFilter
                     )?.label || 'All'}
                   </button>
 
-                  {showDivisionFilters && (
+                  {showCategoryFilters && (
                     <>
                       <div
                         className="fixed inset-0 z-10"
                         onClick={() =>
-                          setShowDivisionFilters(false)
+                          setShowCategoryFilters(false)
                         }
                       />
 
                       <div className="absolute left-0 top-full mt-2 z-20 w-44 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg p-1.5">
-                        {DIVISION_FILTERS.map((f) => {
+                        {CATEGORY_FILTERS.map((f) => {
                           const isActive =
-                            divisionFilter === f.key;
+                            categoryFilter === f.key;
 
                           return (
                             <button
                               key={f.key}
                               type="button"
                               onClick={() => {
-                                setDivisionFilter(f.key);
-                                setShowDivisionFilters(false);
+                                setCategoryFilter(f.key);
+                                setShowCategoryFilters(false);
                               }}
                               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition ${
                                 isActive
@@ -1360,6 +1337,7 @@ export default function TeamView() {
         }}
         coachId={currentUserId}
         coachSport={profile?.sport}
+        coachSports={allowedCoachSports}
         athleteToEdit={athleteToEdit}
       />
 

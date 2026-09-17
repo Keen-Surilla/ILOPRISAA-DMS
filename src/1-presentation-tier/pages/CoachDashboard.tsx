@@ -1,13 +1,17 @@
 // src/1-presentation-tier/pages/CoachDashboard.tsx
-import React, { useMemo, useState, useEffect, Suspense, lazy } from 'react';
-import { Calendar, Users, LayoutDashboard,  Clock, ClipboardCheck, Bell, CheckCircle2, FileText, Archive, ShieldCheck, AlertTriangle, Search, ChevronRight, ChevronLeft, XCircle, UploadCloud, Send } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useMemo, useState, useEffect, Suspense, lazy, useRef } from 'react';
+import { Calendar, Users, LayoutDashboard,  Clock, ClipboardCheck, Bell, CheckCircle2, FileText, Archive, ShieldCheck, AlertTriangle, Search, ChevronRight, ChevronLeft, X, XCircle, UploadCloud, Send, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../2-application-tier/stores/authStore';
 import { getProfile } from '../../3-data-tier/services/profileService';
 import { teamApi } from '../../3-data-tier/api/teamApi';
 import { documentsApi, TOTAL_REQUIRED_DOCUMENTS } from '../../3-data-tier/api/documentsApi';
 import { listEvents } from '../../3-data-tier/services/eventService';
+import { deleteNotification, getMyNotifications, markAllNotificationsRead, markNotificationRead, type NotificationRow } from '../../3-data-tier/api/notificationsApi';
+import { supabase } from '../../3-data-tier/config/SupabaseClient';
 import { PortalShell } from '../components/layout/PortalShell';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { DocumentChecklistModal } from '../components/ui/DocumentChecklistModal';
 import ReportsPage from './coach-views/Reports';
 
@@ -28,6 +32,420 @@ const buildAvatarUrl = (seed: string) => {
   
   return `${baseUrl}?seed=${encodeURIComponent(seed)}&backgroundType=gradientLinear&backgroundColor=0f766e,0891b2,0e7490`;
 };
+
+function formatNotificationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function CoachNotificationBell({ profileId }: { profileId?: string | null }) {
+  const queryClient = useQueryClient();
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] =
+    useState<NotificationRow | null>(null);
+  const [docsAthlete, setDocsAthlete] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [notificationPendingDelete, setNotificationPendingDelete] =
+    useState<NotificationRow | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const queryKey = ['coachNotifications', profileId];
+
+  const { data: notifications = [], isLoading } = useQuery({
+    queryKey,
+    queryFn: () => getMyNotifications(profileId as string),
+    enabled: !!profileId,
+    staleTime: 30_000,
+  });
+
+  const { data: roster = [] } = useQuery({
+    queryKey: ['teamMembers', profileId],
+    queryFn: () => teamApi.getTeamMembers(profileId as string),
+    enabled: !!profileId,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const selectedAthlete = selectedNotification
+    ? roster.find((athlete) => athlete.id === selectedNotification.athlete_id) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!profileId) return;
+
+    const channel = supabase
+      .channel(`coach_notifications_${profileId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_profile_id=eq.${profileId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profileId, queryClient]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!panelRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!selectedNotification || notificationPendingDelete) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedNotification(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNotification, notificationPendingDelete]);
+
+  const markReadMutation = useMutation({
+    mutationFn: markNotificationRead,
+    onMutate: async (notificationId: string) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<NotificationRow[]>(queryKey);
+
+      queryClient.setQueryData<NotificationRow[]>(queryKey, (current = []) =>
+        current.map((notification) =>
+          notification.id === notificationId
+            ? { ...notification, read_at: notification.read_at ?? new Date().toISOString() }
+            : notification
+        )
+      );
+
+      return { previous };
+    },
+    onError: (_error, _notificationId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteNotification,
+    onMutate: async (notificationId: string) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<NotificationRow[]>(queryKey);
+
+      queryClient.setQueryData<NotificationRow[]>(queryKey, (current = []) =>
+        current.filter((notification) => notification.id !== notificationId)
+      );
+
+      return { previous };
+    },
+    onError: (_error, _notificationId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+    },
+    onSuccess: () => {
+      setNotificationPendingDelete(null);
+      setSelectedNotification(null);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: markAllNotificationsRead,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<NotificationRow[]>(queryKey);
+      const readAt = new Date().toISOString();
+
+      queryClient.setQueryData<NotificationRow[]>(queryKey, (current = []) =>
+        current.map((notification) =>
+          notification.read_at ? notification : { ...notification, read_at: readAt }
+        )
+      );
+
+      return { previous };
+    },
+    onError: (_error, _profileId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+
+  const unreadCount = notifications.filter((notification) => !notification.read_at).length;
+
+  const handleNotificationClick = (notification: NotificationRow) => {
+    if (!notification.read_at && !markReadMutation.isPending) {
+      markReadMutation.mutate(notification.id);
+    }
+    setSelectedNotification(notification);
+    setIsOpen(false);
+  };
+
+  const handleMarkAllRead = () => {
+    if (!profileId || unreadCount === 0 || markAllReadMutation.isPending) return;
+
+    markAllReadMutation.mutate(profileId);
+  };
+
+  const handleViewAthlete = () => {
+    if (!selectedAthlete) return;
+
+    setDocsAthlete({
+      id: selectedAthlete.id,
+      name: selectedAthlete.name,
+    });
+    setSelectedNotification(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!notificationPendingDelete || deleteMutation.isPending) return;
+
+    deleteMutation.mutate(notificationPendingDelete.id);
+  };
+
+  return (
+    <div ref={panelRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="relative w-9 h-9 rounded-full bg-white dark:bg-[#0f172a] flex items-center justify-center text-slate-500 dark:text-[#94a3b8] hover:text-slate-900 dark:hover:text-[#f8fafc] hover:bg-slate-50 dark:hover:bg-[#191f31] transition-colors"
+        aria-label="Notifications"
+        aria-expanded={isOpen}
+      >
+        <Bell className="w-[18px] h-[18px]" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#f43f5e] text-white text-[10px] font-bold leading-[18px] text-center ring-2 ring-white dark:ring-[#0c1324]">
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 z-30 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-white/[0.06] dark:bg-[#0f172a]">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-white/[0.06]">
+            <div>
+              <h3 className="text-[15px] font-semibold text-slate-900 dark:text-[#f8fafc]">
+                Notifications
+              </h3>
+              <p className="mt-0.5 text-[11px] text-slate-500 dark:text-[#94a3b8]">
+                {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+              </p>
+            </div>
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                disabled={markAllReadMutation.isPending}
+                className="rounded-lg px-2.5 py-1.5 text-[12px] font-semibold text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-[#adc6ff] dark:hover:bg-[#adc6ff]/10"
+              >
+                Mark all as read
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-96 overflow-y-auto p-2">
+            {isLoading ? (
+              <div className="px-3 py-8 text-center text-[13px] text-slate-500 dark:text-[#94a3b8]">
+                Loading notifications...
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="px-3 py-8 text-center">
+                <Bell className="mx-auto h-5 w-5 text-slate-300 dark:text-[#64748b]" />
+                <p className="mt-2 text-[13px] text-slate-500 dark:text-[#94a3b8]">
+                  No notifications yet.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {notifications.map((notification) => {
+                  const isUnread = !notification.read_at;
+
+                  return (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      onClick={() => handleNotificationClick(notification)}
+                      className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors ${
+                        isUnread
+                          ? 'bg-blue-50 text-slate-900 hover:bg-blue-100 dark:bg-[#adc6ff]/10 dark:text-[#f8fafc] dark:hover:bg-[#adc6ff]/15'
+                          : 'text-slate-600 hover:bg-slate-50 dark:text-[#94a3b8] dark:hover:bg-[#191f31]'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${
+                            isUnread ? 'bg-blue-600 dark:bg-[#adc6ff]' : 'bg-transparent'
+                          }`}
+                        />
+                        <span className="min-w-0">
+                          <span className={`block text-[13px] leading-snug ${isUnread ? 'font-semibold' : 'font-medium'}`}>
+                            {notification.message}
+                          </span>
+                          <span className="mt-1 block text-[11px] text-[#64748b]">
+                            {formatNotificationDate(notification.created_at)}
+                          </span>
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {selectedNotification &&
+        !notificationPendingDelete &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-[1px]"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setSelectedNotification(null)}
+          >
+            <div
+              className="flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+                <div>
+                  <h3 className="text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+                    Notification
+                  </h3>
+                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    {formatNotificationDate(selectedNotification.created_at)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedNotification(null)}
+                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  aria-label="Close notification"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+                <p className="text-[13px] leading-relaxed text-slate-700 dark:text-slate-300">
+                  {selectedNotification.message}
+                </p>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Athlete
+                  </p>
+                  {selectedAthlete ? (
+                    <div className="mt-2 min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+                        {selectedAthlete.name}
+                      </p>
+                      {selectedAthlete.email && (
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400">
+                          {selectedAthlete.email}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[12px] text-slate-500 dark:text-slate-400">
+                      Athlete details are not available for this notification.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  type="button"
+                  onClick={() => setNotificationPendingDelete(selectedNotification)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3.5 py-2 text-[12px] font-bold text-red-600 transition-colors hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNotification(null)}
+                    className="rounded-lg px-3.5 py-2 text-[12px] font-bold text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Close
+                  </button>
+                  {selectedAthlete && (
+                    <button
+                      type="button"
+                      onClick={handleViewAthlete}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-[12px] font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      View Athlete
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      <ConfirmModal
+        isOpen={notificationPendingDelete !== null}
+        title="Delete Notification"
+        message="Are you sure you want to delete this notification? This action cannot be undone."
+        confirmText="Delete"
+        confirmLoadingText="Deleting..."
+        isLoading={deleteMutation.isPending}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setNotificationPendingDelete(null)}
+      />
+
+      <DocumentChecklistModal
+        isOpen={docsAthlete !== null}
+        athleteId={docsAthlete?.id ?? null}
+        athleteName={docsAthlete?.name ?? ''}
+        coachUserId={profileId ?? ''}
+        onClose={() => setDocsAthlete(null)}
+      />
+    </div>
+  );
+}
 
 function SkeletonBlock({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg bg-white/[0.06] ${className}`} />;
@@ -1062,10 +1480,7 @@ export default function CoachDashboard() {
             </div>
             <div className="flex items-center gap-5 shrink-0">
               {/* THEME TOGGLE REMOVED FROM HERE */}
-              <button className="relative w-9 h-9 rounded-full bg-white dark:bg-[#0f172a] flex items-center justify-center text-slate-500 dark:text-[#94a3b8] hover:text-slate-900 dark:hover:text-[#f8fafc] hover:bg-slate-50 dark:hover:bg-[#191f31] transition-colors">
-                <Bell className="w-[18px] h-[18px]" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#f43f5e] ring-2 ring-white dark:ring-[#0c1324]" />
-              </button>
+              <CoachNotificationBell profileId={user?.id} />
             </div>
           </div>
 

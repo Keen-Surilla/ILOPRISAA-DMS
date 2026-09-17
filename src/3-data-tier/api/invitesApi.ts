@@ -1,4 +1,5 @@
 import { supabase } from '../config/SupabaseClient';
+import { canonicalizeInstitutionName } from '../constant/schools';
 import type { Invite, InviteRole } from '../types/database.types.extras';
 
 export type InviteRow = Invite;
@@ -23,7 +24,7 @@ export async function createInvite(
       email: email.trim().toLowerCase(),
       role,
       invited_by: invitedBy,
-      institution_id: institutionId ?? null,
+      institution_id: canonicalizeInstitutionName(institutionId),
       full_name: fullName?.trim() || null,
       ...(expiresAt ? { expires_at: expiresAt } : {}),
     })

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../../3-data-tier/config/SupabaseClient';
 import type { Profile, UserRole } from '../../3-data-tier/types/database.types.extras';
+import { canonicalizeInstitutionName } from '../../3-data-tier/constant/schools';
 
 
 
@@ -145,7 +146,7 @@ sendAthleteOtp: async (email: string) => {
             phone: phone,
             dob: dob,
             gender: gender,
-            school: school,
+            school: canonicalizeInstitutionName(school),
             sport: sport,
             role: role,
           },
