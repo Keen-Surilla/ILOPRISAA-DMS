@@ -1,6 +1,4 @@
-import os
 
-readme_content = """# ILOPRISAA Secure Digital Athlete Document Management System
 
 ## Introduction
 The ILOPRISAA Document Management System (DMS) aims to replace the traditional, folder-based method of tracking physical documents with a centralized, secure digital record. It streamlines the submission, review, and verification of athlete credentials such as PSA birth certificates, medical clearances, and school IDs.
